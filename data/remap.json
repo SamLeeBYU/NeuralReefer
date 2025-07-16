@@ -1,0 +1,43 @@
+{
+  "0": "oddball",
+  "coral": "oddball",
+  "turbinaria_coral": "oddball",
+  "pavona": "oddball",
+  "dead": "noncoral",
+  "favia": "oddball",
+  "lobophyllia": "oddball",
+  "turbinaria": "noncoral",
+  "plating": "oddball",
+  "montipora": "oddball",
+  "porites_horizontalata": "oddball",
+
+  "acropora_branching": "branching_acropora",
+
+  "acropora_corymbose": "finger_acropora",
+  "acropora_digitate": "finger_acropora",
+  "acropora_lawn": "finger_acropora",
+  "acropora_finger": "finger_acropora",
+  "acropora_0": "finger_acropora",
+  "acropora_shaggy": "finger_acropora",
+  "acropora_table": "finger_acropora",
+
+  "pocillopora_damicornis": "pocillopora_",
+  "pocillopora_meandrina": "pocillopora_",
+  "pocillopora_verrucosa": "pocillopora_",
+  "pocillopora_0": "pocillopora_",
+  "pocillopora": "pocillopora_",
+  
+  "mounding": "mounding_",
+  "porites_asteroides": "mounding_",
+  "porites_lobata": "mounding_",
+  "porites_massive": "mounding_",
+  "porites_australiensis": "mounding_",
+  "fungia": "mounding_",
+
+  "porites_rus": "finger-knob_porites",
+  "porites_monticulosa": "finger-knob_porites",
+  "porites_deformis": "finger-knob_porites",
+  "porites_0": "finger-knob_porites",
+  "porites_finger": "finger-knob_porites",
+  "porites_cylindrica": "finger-knob_porites"
+}
