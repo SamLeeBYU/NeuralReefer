@@ -9,7 +9,7 @@ for easy access and modification.
 #Trained models / tuned hyperparameters
 FILTER_MODELS_DIR = "models/filter"
 HYPERPARAM_FILE = f"data/segmentation/SAM2hyperparameters.json"
-MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.1.pt"
+MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.15.pt"
 
 #Needed to reference the SAM2 backbone
 SAM2_PATH = "C:\\Users\\lab\\Box\\Research\\WHOI\\sam2"
@@ -44,12 +44,14 @@ K = 30
 
 #For creating the mask data set used for classification
 CREATE_MASK_DATASET = False
-TOLERANCE = 0.1 #I've found that lower tolerance is generally better (by reducing noise in the training data)
+#I've found that lower tolerance is generally better (by reducing noise in the training data)
+#The tradeoff is that with lower tolerance, some of the big proposed masks will be thrown out of the training set
+TOLERANCE = 0.15 
 #These are the size of the mask inputs that will be used for classification
 MASK_SIZE = (128, 128)
 
-#For training the coral filter
-TRAIN_CORAL_FILTER = False
+#For training the coral classifier
+TRAIN_CORAL_FILTER = True
 #Number of models in the ensemble
 M = 11
 #Max number of iterations through the entire data set

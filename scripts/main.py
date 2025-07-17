@@ -50,11 +50,11 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from config import SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, FILTER_MODELS_DIR, EXT, VERBOSE, M, SAVE_MASKS
+from config import SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, FILTER_MODELS_DIR, EXT, VERBOSE, M, SAVE_MASKS, METADATA
 
 from utils import suppress_prints, restore_prints
-from train import train
-from visualize import plot_segmentation_summary
+from train import train, load_data
+from visualize import plot_segmentation_summary, plot_coral_cover
 
 from filter import CoralFilterEnsembler
 from segmenter import CoralSegmenter
@@ -102,15 +102,16 @@ def eval(image_dir: str) -> pd.DataFrame:
         if SAVE_MASKS:
             segmenter.show_masks(masks, show=False, save_path=save_dir / f"{image_id}.png")
 
-        results.append({"image": img_path, "image_id": image_id, "coral_cover": cover})
+        results.append({"image": img_path, "image_id": image_id, "coral_cover_pred": cover})
 
     return pd.DataFrame(results)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NeuralReefer")
-    parser.add_argument("--mode", type=str, default="eval", choices=["train", "visualize", "eval"], help="Execution mode")
-    parser.add_argument("--version", type=str, required=False, help="Version identifier for visualizations")
+    parser.add_argument("--mode", type=str, default="eval", choices=["train", "visualize-coral-cover", "eval"], help="Execution mode")
+    #parser.add_argument("--version", type=str, required=False, help="Version identifier for visualizations")
     parser.add_argument("--image_dir", type=str, required=False, help="Directory of images to evaluate")
+    parser.add_argument("--predictions_file", type=str, required=False, help="File path of evaluations (generated from mode=eval)")
 
     args = parser.parse_args()
 
@@ -118,12 +119,19 @@ if __name__ == "__main__":
         train()
 
     elif args.mode == "visualize":
-        assert args.version, "Must provide --version"
-        plot_segmentation_summary(version=args.version)
+        assert args.prediction_file
+        plot_coral_cover(args.prediction_file)
 
     elif args.mode == "eval":
         assert args.image_dir, "Must provide --image_dir"
-        df = eval(args.image_dir)
+        predictions_data = eval(args.image_dir)
         output_file = f"{args.image_dir}/eval/eval.csv"
-        df.to_csv(output_file, index=False)
+
+        if METADATA is not None:
+            metadata = load_data(METADATA)
+            metadata['image_id'] = metadata['filename'].str.split('.').str[0]
+            
+            predictions_data = pd.merge(predictions_data, metadata, on='image_id', how='left')
+
+        predictions_data.to_csv(predictions_data, index=False)
         print(f"Saved coral cover estimates to {output_file}")

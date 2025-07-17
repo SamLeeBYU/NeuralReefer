@@ -28,7 +28,7 @@ class MaskLoader(Dataset):
         Creating the data set a priori (as is done here) and then loading in the data in the RAM come training comes with its limitations, but
         in general, greatly speeds up model training times
         
-        Ground truth masks are treated as positive (coral), while non-overlapping predicted masks are labeled as negative.
+        Ground truth masks are treated as coral instances pertaining to genus/bleached category (defined in remap.json), while non-overlapping predicted masks are labeled as 'noncoral'.
 
         Args:
             images (List[str], optional): List of image paths to process.
@@ -45,6 +45,7 @@ class MaskLoader(Dataset):
 
         self.labels = None
         self.img_data = None
+        self.classes = None
 
         self.transform = transform or MASK_TRANSFORM
 
@@ -73,6 +74,7 @@ class MaskLoader(Dataset):
 
         self.labels = data["labels"]
         self.img_data = data["img_data"]
+        self.classes = data["classes"]
 
         #Shuffle labels (is the model actually learning?)
         # indices = np.arange(len(self.labels))
@@ -110,8 +112,9 @@ class MaskLoader(Dataset):
     def save_data(self, save_path):
         print(f"Saving dataset to {save_path}")
         torch.save({
+            "classes": self.classes,
             "labels": self.labels,
-            "img_data": self.img_data
+            "img_data": self.img_data, 
         }, save_path)
 
     def _create_dataset(self, images: List[str], tolerance=0.1, min_area=400):
@@ -125,14 +128,21 @@ class MaskLoader(Dataset):
             min_area (int): Minimum area required for predicted masks to be considered.
         """
 
+        #Coral classification labels
         labels = []
         img_data = []
 
         gt_masks_set = []
+        genus_labels_set = []
+        bleached_labels_set = []
+
         for img_path in tqdm(images, desc="Loading Ground Truth Masks"):
-            genus_labels, gt_masks = self.segmentation_model.get_gt_masks(img_path, 'genus')
-            #We throw out dead coral and algae because dead coral and algae are not consistently annotated (and thus would be hard to classify from an ML standpoint)
-            gt_masks_set.append([segmentation for j, segmentation in enumerate(gt_masks) if genus_labels[j] != "noncoral"])
+            genus_labels, bleach_labels, gt_masks = self.segmentation_model.get_gt_masks(img_path)
+            
+            genus_labels_set.append(genus_labels)
+            bleached_labels_set.append(bleach_labels)
+            
+            gt_masks_set.append(gt_masks)
 
         for i, x in tqdm(enumerate(images), desc="Extrapolating masks from image"):
             
@@ -151,15 +161,17 @@ class MaskLoader(Dataset):
             for j, segmentation in enumerate(gt_masks_set[i]):
                 torch_mask = torch.tensor(segmentation)
                 img_data.append(self.extract(torch_image, torch_mask, self.mask_size, self.transform))
-                #Each ground truth mask automatically gets a positive label
-                labels.append(1)
+
+                #Each ground truth mask automatically gets a genus/bleached label.
+                #Dead and algae (among the masks in the gt set) will get 'noncoral' as defined in remap.json
+                labels.append(genus_labels_set[i][j] + ":" + ("bleached" if bleached_labels_set[i][j] == 1 else "healthy"))
 
             #Create mask predictions
             all_pred_masks = self.segmentation_model.predict(img_path=x, init_models=(i==0), keep_all=True)
             all_pred_masks_filtered = [mask for mask in all_pred_masks if mask['segmentation'].sum() >= min_area]
             pred_masks = np.stack([mask['segmentation'] for mask in all_pred_masks_filtered])
 
-            #Use the predicted masks to extract objects that are separate objects as the ground coral
+            #Use the predicted masks to extract objects that are separate objects from the gt masks
             gt_map = np.any(gt_masks_set[i], axis=0)
             for j, pred_mask in enumerate(pred_masks):
                 
@@ -169,11 +181,17 @@ class MaskLoader(Dataset):
                 if overlap <= tolerance:
                     torch_mask = torch.tensor(pred_mask)
                     img_data.append(self.extract(torch_image, torch_mask, self.mask_size, self.transform))
-                    labels.append(0)
+                    labels.append("noncoral")
+
+        #Normalize all noncoral:bleached, noncoral:healthy (if any exist) -> noncoral to align with extrapolated mask labels
+        labels = ['noncoral' if 'noncoral' in label else label for label in labels]
+        
+        #Create a label dictionary for the ML model
+        self.classes = {label: idx for idx, label in enumerate(sorted(set(labels)))}
 
         #Save the data as tensors objects for pytorch models
         self.img_data = torch.stack(img_data)
-        self.labels = torch.tensor(labels, dtype=torch.int8)
+        self.labels = torch.nn.functional.one_hot(torch.tensor([self.classes[label] for label in labels]), num_classes=len(self.classes))
 
     @staticmethod
     def extract(img, mask, output_size, transform_fn, padding=5):

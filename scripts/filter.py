@@ -39,7 +39,7 @@ class CoralFilter:
 
     Args:
         model (CoralClassifier): Neural network model for binary classification.
-        dataset (MaskLoader): Dataset of coral/non-coral image patches and labels.
+        dataset (MaskLoader): Dataset of coral/non-coral image masks and labels.
         device (torch.device, optional): CUDA or CPU device. Auto-detects if not provided.
         loss_fn (nn.Module): Loss function. Defaults to binary CrossEntropyLoss.
         epochs (int): Maximum number of training epochs.
@@ -66,6 +66,7 @@ class CoralFilter:
         self.weight_decay = weight_decay
 
         self.dataset = dataset or MaskLoader()
+        self.noncoral_class = self.dataset.classes['noncoral']
 
         if train:
             train_idx, val_idx = train_test_split(
@@ -131,10 +132,11 @@ class CoralFilter:
 
                 epoch_loss += loss.item()
 
-                prob = torch.sigmoid(pred)
-                preds = (prob >= 0.5).int()
-                correct += (preds == y).sum().item()
-                total += y.numel()
+                y_class = torch.argmax(y, dim=1)
+                probs = torch.softmax(pred, dim=1)           # shape: [B, K]
+                preds = torch.argmax(probs, dim=1)           # shape: [B]
+                correct += (preds == y_class).sum().item()
+                total += y.size(0)
 
                 if batch % 8 == 0:
                     loss, current = loss.item(), (batch+1)
@@ -170,7 +172,7 @@ class CoralFilter:
             float: Average validation loss.
 
         Also prints accuracy and recall statistics. Recall is defined as:
-            TP / (TP + FN) for the positive (coral) class.
+            TP / (TP + FN) for identifying coral / noncoral objects
         """
 
         self.model.eval()
@@ -189,13 +191,14 @@ class CoralFilter:
                 pred = self.model(X).squeeze(1)
                 test_loss += self.loss_fn(pred, y.float()).item()
 
-                prob = torch.sigmoid(pred)
-                preds = (prob >= 0.5).int()
-                correct += (preds == y).sum().item()
-                total += y.numel()
+                y_class = torch.argmax(y, dim=1)
+                probs = torch.softmax(pred, dim=1)           # shape: [B, K]
+                preds = torch.argmax(probs, dim=1)           # shape: [B]
+                correct += (preds == y_class).sum().item()
+                total += y.size(0)
 
-                true_positive += ((preds == 1) & (y == 1)).sum().item()
-                false_negative += ((preds == 0) & (y == 1)).sum().item()
+                true_positive += ((preds != self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
+                false_negative += ((preds == self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
 
         test_loss /= num_batches
         accuracy = correct / total if total > 0 else 0
@@ -246,15 +249,17 @@ class CoralFilterEnsembler:
 
         self.mask_data = None
         if self.base_dataset is not None: #e.g. if we're training the model
-            self.mask_data = MaskLoader(load_file=self.base_dataset, transform=self.filter_transform, randomAugment=True)
+            self.mask_data = MaskLoader(load_file=self.base_dataset, transform=self.filter_transform, randomAugment=False)
             self.mask_loader = DataLoader(self.mask_data, batch_size=batch_size)
 
             #Preliminary estimates suggest that our images contain 30-40% coral cover, on average
             #However, the data that will the models will be trained with is inflated with negative labels to increase sample size (resulting in 80:20 ratio of negative to positive labels)
             #Note that the inflated data *is* representative of the data that will ultimately be fed into the trained models because of *where* (the stage at which) the model is implemented
             labels = self.mask_data.labels.numpy()
-            p = labels.sum()/len(labels) #proportion of data that are positive labels (e.g. % of masks that are coral in the training dataset)
-            self.weight = torch.tensor([(1-p) / p], device=device)
+            base_rates = np.mean(labels, axis=0)
+            weights = 1.0 / base_rates
+            weights = weights / weights.sum() * len(self.mask_data.classes)
+            self.weight = torch.tensor(weights, device=device)
 
             #A better accuracy can generally be induced by balancing the weights (as the model regresses to the base rate), but that usually hinders recall
 
@@ -273,26 +278,26 @@ class CoralFilterEnsembler:
         self.bias = 0
         self.ensemble_weights = np.ones(self.m, dtype=np.float32) / self.m
 
-    def train(self, k=5, c_int=10, class_weight={0: 1, 1: 4}, submodel_patience=5, ensemble_split=0.3):
+    def train(self, k=5, c_int=10, submodel_patience=5, ensemble_split=0.3):
         for i in range(self.m):
             print(f"Creating model {i+1}/{self.m}")
-            maskloader_i = MaskLoader(load_file=self.base_dataset, transform=self.filter_transform, randomAugment=True)
-            model_i = CoralFilter(self.base_model(pretrained=True), maskloader_i, self.device, 
-                                  nn.BCEWithLogitsLoss(pos_weight=self.weight), 
+            maskloader_i = MaskLoader(load_file=self.base_dataset, transform=self.filter_transform, randomAugment=False)
+            model_i = CoralFilter(self.base_model(pretrained=True, dim=len(self.mask_data.classes)), maskloader_i, self.device, 
+                                  nn.CrossEntropyLoss(weight=self.weight), 
                                   batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=True, seed=self.seed, bootstrap=True)
             model_i.train(patience=submodel_patience)
             self.models.append(model_i)
 
-        self.train_weights(k, c_int, class_weight, ensemble_split)
+        self.train_weights(k, c_int, ensemble_split)
 
-    def train_weights(self, k=5, c_int=10, class_weight={0: 1, 1: 4}, ensemble_split=0.3):
+    def train_weights(self, k=5, c_int=10, ensemble_split=0.3):
 
         #Now we weight each model that gives the best OOS ensemble performance
-
+        
         _, idx = train_test_split(
             np.arange(len(self.mask_data)),
             test_size=self.split,
-            stratify=self.mask_data.labels.numpy(),
+            stratify=np.argmax(self.mask_data.labels.numpy(), axis=1),
             random_state=self.seed
         )
 
@@ -300,8 +305,8 @@ class CoralFilterEnsembler:
         ensemble_dat = Subset(self.mask_data, idx)
         ensemble_loader = DataLoader(ensemble_dat, batch_size=self.batch_size, shuffle=False)
 
-        logits = np.zeros((len(ensemble_dat), self.m), dtype=np.float32)
-        y_true = self.mask_data.labels[idx].numpy()
+        logits = np.zeros((len(ensemble_dat), self.m, len(self.mask_data.classes)), dtype=np.float32)
+        y_true = np.argmax(self.mask_data.labels[idx].numpy(), axis=1)
 
         for m, filter_model in tqdm(enumerate(self.models), "Evaluating models"):
             filter_model.model.eval()
@@ -309,12 +314,12 @@ class CoralFilterEnsembler:
                 for batch, (X, y) in enumerate(ensemble_loader):
                     X, y = X.to(self.device), y.to(self.device)
                     pred = filter_model.model(X).squeeze(1)
-                    logits[batch * self.batch_size : batch * self.batch_size + len(X), m] = pred.cpu().numpy()
+                    logits[batch * self.batch_size : batch * self.batch_size + len(X), m, :] = pred.cpu().numpy()
 
         ensemble_train_idx, ensemble_test_idx = train_test_split(
             np.arange(len(idx)),
             test_size=ensemble_split,
-            stratify=y_true,
+            #stratify=y_true
         )
 
         X_train, X_test = logits[ensemble_train_idx], logits[ensemble_test_idx]
@@ -327,7 +332,7 @@ class CoralFilterEnsembler:
             scoring='roc_auc',
             solver='lbfgs',
             max_iter=1000,
-            class_weight=class_weight
+            class_weight={i: weight for i, weight in enumerate(self.weight.numpy())}
         )
         clf.fit(X_train, y_train)
 
@@ -360,7 +365,7 @@ class CoralFilterEnsembler:
         with open(os.path.join(dir, "ensemble_params.json"), 'w') as f:
             json.dump(convert_json_compat(ensemble_params), f, indent=4)
 
-    def load_models(self, dir=None):
+    def load_models(self, dir=None, dim=13):
         dir = dir or FILTER_MODELS_DIR
         model_files = glob(os.path.join(dir, "model_*.pth"))
         if len(model_files) < 1:
@@ -369,7 +374,7 @@ class CoralFilterEnsembler:
             self.models = []
             for i in tqdm(range(self.m), desc="Loading models"):
                 model_file = model_files[i]
-                model = CoralFilter(self.base_model(pretrained=True), self.mask_data, self.device,
+                model = CoralFilter(self.base_model(pretrained=True, dim=dim), self.mask_data, self.device,
                                     batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=False)
                 model.load_model(model_file)
                 self.models.append(model)

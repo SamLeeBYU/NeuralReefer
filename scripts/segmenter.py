@@ -164,7 +164,7 @@ class SAM2Segmenter:
     def resize_image(img: np.array, size) -> np.array:
         return cv2.resize(img, size, interpolation=cv2.INTER_AREA)
 
-    def get_gt_masks(self, img_path, annotation_label='bleached'):
+    def get_gt_masks(self, img_path):
 
         if self.annotations is None:
             raise ValueError("No annotations loaded. Please load annotations first using `parse_annotations` method.")
@@ -178,12 +178,13 @@ class SAM2Segmenter:
         masks = [
             np.array(polygon, dtype=np.int32).reshape(-1, 2) for polygon in self.annotations['annotations'][annotation_loc]['segmentations']
         ]
-        labels = self.annotations['annotations'][annotation_loc][annotation_label]
+        genus_labels = self.annotations['annotations'][annotation_loc]['genus']
+        bleached_labels = self.annotations['annotations'][annotation_loc]['bleached']
 
         if len(masks) < 1:
-            return None, np.array([])
+            return None, None, np.array([])
         else:
-            return labels, np.stack([cv2.fillPoly(np.zeros((1024, 1024), dtype=np.int8), [mask], 1) > 0 for mask in masks])
+            return genus_labels, bleached_labels, np.stack([cv2.fillPoly(np.zeros((1024, 1024), dtype=np.int8), [mask], 1) > 0 for mask in masks])
         
     # Image Augmentation Methods ####################################################################################
     @staticmethod
@@ -261,8 +262,8 @@ class SAM2Segmenter:
         if not verbose: suppress_prints()
         gt_masks_set = []
         for img_path in tqdm(images, desc="Loading Ground Truth Masks"):
-            labels, gt_masks = self.get_gt_masks(img_path, 'genus')
-            gt_masks_set.append([segmentation for j, segmentation in enumerate(gt_masks) if labels[j] != "noncoral"])
+            genus_labels, _, gt_masks = self.get_gt_masks(img_path)
+            gt_masks_set.append([segmentation for j, segmentation in enumerate(gt_masks) if genus_labels[j] != "noncoral"])
         if not verbose: restore_prints()
 
         n_annotations = [len(gt_masks) for gt_masks in gt_masks_set]
