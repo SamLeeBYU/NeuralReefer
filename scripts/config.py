@@ -6,10 +6,12 @@ This module centralizes all file paths and key parameter settings
 for easy access and modification.
 """
 
+import torch.nn as nn
+
 #Trained models / tuned hyperparameters
 FILTER_MODELS_DIR = "models/filter"
 HYPERPARAM_FILE = f"data/segmentation/SAM2hyperparameters.json"
-MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.15.pt"
+MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.2.pt"
 
 #Needed to reference the SAM2 backbone
 SAM2_PATH = "C:\\Users\\lab\\Box\\Research\\WHOI\\sam2"
@@ -24,7 +26,7 @@ SAVE_MASKS = True
 
 #Training Variables #################################################################################
 #(You don't have to touch these parameters if you don't wish to train the model on new data)
-VERSION = 2.0
+VERSION = 3.0
 VERBOSE = False
 
 #Where coco annotations (from roboflow) and images are located
@@ -46,7 +48,7 @@ K = 30
 CREATE_MASK_DATASET = False
 #I've found that lower tolerance is generally better (by reducing noise in the training data)
 #The tradeoff is that with lower tolerance, some of the big proposed masks will be thrown out of the training set
-TOLERANCE = 0.15 
+TOLERANCE = 0.2 
 #These are the size of the mask inputs that will be used for classification
 MASK_SIZE = (128, 128)
 
@@ -55,15 +57,21 @@ TRAIN_CORAL_FILTER = True
 #Number of models in the ensemble
 M = 11
 #Max number of iterations through the entire data set
-EPOCHS = 30
+EPOCHS = 50
 #How many data points are passed forward through the model before the gradient is updated
 BATCH_SIZE = 32
 #The 'size' of the step used for each gradient update
-LR = 1e-4
+LR = 1e-4/2
 #Regularization parameter
 WEIGHT_DECAY = 1e-5
 #How much of the data is perserved to train the ensembler
 SPLIT = 0.3
+#Loss Function for the Coral Classifier Model
+LOSS_FN = nn.CrossEntropyLoss()
+#Patience parameter for early stopping
+PATIENCE = 5
+#Class Dictionary File
+CLASSES_FILE = "data/classes.json"
 
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data

@@ -23,7 +23,7 @@ from config import (
     TUNE_SEGMENTER, N_CALLS, K, VERBOSE,
     CREATE_MASK_DATASET, MASK_SIZE, TOLERANCE, MASK_DATA_PATH,
 
-    TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR,
+    TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR, LOSS_FN, PATIENCE,
 
     EVAL, SAVE_IMG, FIG_SIZE, METADATA
 )
@@ -151,12 +151,12 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
     coral_filter = CoralFilterEnsembler(
         base_dataset=MASK_DATA_PATH if train_coral_filter else None,
         filter_transform=MASK_TRANSFORM,
-        device=device,
+        device=device, loss_fn=LOSS_FN,
         m=M, epochs=EPOCHS, batch_size=BATCH_SIZE, lr=LR, weight_decay=WEIGHT_DECAY, split=SPLIT
     )
 
     if train_coral_filter:
-        coral_filter.train()
+        coral_filter.train(submodel_patience=PATIENCE)
         coral_filter.save_models(FILTER_MODELS_DIR)
 
     #####################################################################################################################################

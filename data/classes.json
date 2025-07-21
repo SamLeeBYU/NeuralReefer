@@ -1,0 +1,19 @@
+{
+  "branching_acropora:bleached": 0,
+  "branching_acropora:healthy": 1,
+  "finger-knob_porites:bleached": 2,
+  "finger-knob_porites:healthy": 3,
+  "finger_acropora:bleached": 4,
+  "finger_acropora:healthy": 5,
+  "moundig:bleached": 6,
+  "mounding_:bleached": 7,
+  "mounding_:healthy": 8,
+  "noncoral": 9,
+  "oddball:bleached": 10,
+  "oddball:healthy": 11,
+  "pocillopora_:bleached": 12,
+  "pocillopora_:healthy": 13,
+  "porites:bleached": 14,
+  "porites_astreoides:healthy": 15,
+  "portes_cylindrica:healthy": 16
+}

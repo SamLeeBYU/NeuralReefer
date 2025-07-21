@@ -21,9 +21,9 @@ from sklearn.metrics import roc_auc_score, confusion_matrix
 
 from utils import convert_json_compat
 from data import MaskLoader
-from classifier import CoralClassifier
+from classifier import CoralClassifier, EnsembleOptimizer
 
-from config import VERBOSE, MASK_SIZE, FILTER_MODELS_DIR
+from config import VERBOSE, MASK_SIZE, FILTER_MODELS_DIR, CLASSES_FILE
 from transforms import MASK_TRANSFORM
 
 class CoralFilter:
@@ -240,7 +240,7 @@ class CoralFilter:
 
 class CoralFilterEnsembler:
 
-    def __init__(self, base_dataset: str, base_model = None, filter_transform=None, device=None, m=5, loss_fn=nn.CrossEntropyLoss(), epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.1, seed=42):
+    def __init__(self, base_dataset: str, base_model = None, filter_transform=None, device=None, m=5, loss_fn=None, epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.1, seed=42):
         
         self.device = device or (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
 
@@ -249,7 +249,7 @@ class CoralFilterEnsembler:
 
         self.mask_data = None
         if self.base_dataset is not None: #e.g. if we're training the model
-            self.mask_data = MaskLoader(load_file=self.base_dataset, transform=self.filter_transform, randomAugment=False)
+            self.mask_data = MaskLoader(load_file=self.base_dataset, transform=self.filter_transform, randomAugment=True)
             self.mask_loader = DataLoader(self.mask_data, batch_size=batch_size)
 
             #Preliminary estimates suggest that our images contain 30-40% coral cover, on average
@@ -260,12 +260,15 @@ class CoralFilterEnsembler:
             weights = 1.0 / base_rates
             weights = weights / weights.sum() * len(self.mask_data.classes)
             self.weight = torch.tensor(weights, device=device)
+            self.loss_fn = loss_fn or nn.CrossEntropyLoss(weight=self.weight)
 
             #A better accuracy can generally be induced by balancing the weights (as the model regresses to the base rate), but that usually hinders recall
+        else:
+            with open(CLASSES_FILE, 'r') as f:
+                self.classes = json.load(f)
 
         self.base_model = base_model or CoralClassifier
         self.m = m
-        self.loss_fn = loss_fn
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
@@ -274,23 +277,21 @@ class CoralFilterEnsembler:
         self.seed = seed
         
         self.models = []
+        self.ensemble_model = None
 
-        self.bias = 0
-        self.ensemble_weights = np.ones(self.m, dtype=np.float32) / self.m
-
-    def train(self, k=5, c_int=10, submodel_patience=5, ensemble_split=0.3):
+    def train(self, submodel_patience=5, ensemble_split=0.3):
         for i in range(self.m):
             print(f"Creating model {i+1}/{self.m}")
-            maskloader_i = MaskLoader(load_file=self.base_dataset, transform=self.filter_transform, randomAugment=False)
+            maskloader_i = MaskLoader(load_file=self.base_dataset, transform=self.filter_transform, randomAugment=True)
             model_i = CoralFilter(self.base_model(pretrained=True, dim=len(self.mask_data.classes)), maskloader_i, self.device, 
-                                  nn.CrossEntropyLoss(weight=self.weight), 
+                                  self.loss_fn, 
                                   batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=True, seed=self.seed, bootstrap=True)
             model_i.train(patience=submodel_patience)
             self.models.append(model_i)
 
-        self.train_weights(k, c_int, ensemble_split)
+        self.train_weights(ensemble_split)
 
-    def train_weights(self, k=5, c_int=10, ensemble_split=0.3):
+    def train_weights(self, ensemble_split=0.3):
 
         #Now we weight each model that gives the best OOS ensemble performance
         
@@ -319,37 +320,58 @@ class CoralFilterEnsembler:
         ensemble_train_idx, ensemble_test_idx = train_test_split(
             np.arange(len(idx)),
             test_size=ensemble_split,
-            #stratify=y_true
+            stratify=y_true
         )
 
         X_train, X_test = logits[ensemble_train_idx], logits[ensemble_test_idx]
-        y_train, y_test = y_true[ensemble_train_idx], y_true[ensemble_test_idx]
+        y_train, y_test = self.mask_data.labels[idx][ensemble_train_idx], self.mask_data.labels[idx][ensemble_test_idx]
 
-        clf = LogisticRegressionCV(
-            Cs=c_int,
-            cv=k,
-            penalty='l2',
-            scoring='roc_auc',
-            solver='lbfgs',
-            max_iter=1000,
-            class_weight={i: weight for i, weight in enumerate(self.weight.numpy())}
-        )
-        clf.fit(X_train, y_train)
+        N, M, K = X_train.shape
+        self.ensemble_model = EnsembleOptimizer(M, K)
+        optimizer = torch.optim.Adam(self.ensemble_model.parameters(), lr=self.lr)
 
-        self.ensemble_weights = clf.coef_.flatten()
-        self.bias = clf.intercept_[0]
+        X_train = torch.tensor(X_train, dtype=torch.float32)
 
-        #We can now compute a weighted prediction like this:
-        ensemble_logit = X_test @ self.ensemble_weights + self.bias
-        ensemble_proba = 1 / (1 + np.exp(-ensemble_logit))
+        min_loss = 1e16
+        bad_epochs = 0
+        loss_fn = nn.CrossEntropyLoss()
+        for epoch in tqdm(range(self.epochs), desc="Learning Ensemble Weights"):
+            optimizer.zero_grad()
+            z = self.ensemble_model(X_train)
+            loss = loss_fn(z, y_train.float())
+            loss.backward()
+            optimizer.step()
+            if loss.item() < min_loss:
+                bad_epochs = 0
+                min_loss = loss.item()
+                best_model = self.ensemble_model.state_dict()
+            else:
+                bad_epochs += 1
+            if bad_epochs > 5:
+                break
+        self.ensemble_model.load_state_dict(best_model)
 
-        y_hat = (ensemble_proba >= 0.5).astype(int)
+        correct = 0
+        total = 0
+        true_positive, false_negative, false_positive = 0, 0, 0
+        with torch.no_grad():
+            y_hat = self.ensemble_model(torch.tensor(X_test))
+            y_class = torch.argmax(y_test, dim=1)
+            probs = torch.softmax(y_hat, dim=1)           # shape: [N, K]
+            preds = torch.argmax(probs, dim=1)           # shape: [N]
+            correct += (preds == y_class).sum().item()
+            total += y_test.size(0)
 
-        cm = confusion_matrix(y_test, y_hat)
-        tn, fp, fn, tp = cm.ravel()
-        accuracy = (tp + tn) / (tp + tn + fp + fn)
-        roc_auc = roc_auc_score(y_test, ensemble_proba)
-        print(f"Ensemble model trained with accuracy: {accuracy:.4f}, ROC AUC: {roc_auc:.4f}, Recall: {tp / (tp + fn):.4f}, Precision: {tp / (tp + fp):.4f}")
+            #For coral/non-coral
+            true_positive += ((preds != self.models[0].noncoral_class) & (y_class != self.models[0].noncoral_class)).sum().item()
+            false_negative += ((preds == self.models[0].noncoral_class) & (y_class != self.models[0].noncoral_class)).sum().item()
+            false_positive += ((preds != self.models[0].noncoral_class) & (y_class == self.models[0].noncoral_class)).sum().item()
+
+        recall = true_positive / (true_positive + false_negative) if (true_positive + false_negative) > 0 else 0
+        precision = true_positive / (true_positive + false_positive) if (true_positive + false_positive) > 0 else 0
+        accuracy = correct/total
+
+        print(f"Ensemble model trained with out-of-sample accuracy: {accuracy:.4f}, Recall: {recall:.4f}, Precision: {precision:.4f}")
 
     def save_models(self, dir=None):
         dir = dir or FILTER_MODELS_DIR
@@ -357,13 +379,7 @@ class CoralFilterEnsembler:
             os.makedirs(dir)
         for i, model in tqdm(enumerate(self.models), desc="Saving models"):
             model.save_model(os.path.join(dir, f"model_{i+1}.pth"))
-
-        ensemble_params = {
-            "ensemble_weights": self.ensemble_weights.tolist(),
-            "bias": self.bias
-        }
-        with open(os.path.join(dir, "ensemble_params.json"), 'w') as f:
-            json.dump(convert_json_compat(ensemble_params), f, indent=4)
+        torch.save(self.ensemble_model.state_dict(), os.path.join(dir, "ensemble.pth"))
 
     def load_models(self, dir=None, dim=13):
         dir = dir or FILTER_MODELS_DIR
@@ -378,16 +394,17 @@ class CoralFilterEnsembler:
                                     batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=False)
                 model.load_model(model_file)
                 self.models.append(model)
-        ensemble_params_file = os.path.join(dir, "ensemble_params.json")
-        with open(ensemble_params_file, 'r') as f:
-            ensemble_params = json.load(f)
-        self.ensemble_weights = np.array(ensemble_params["ensemble_weights"], dtype=np.float32)
-        self.bias = ensemble_params["bias"]
+        state_dict = torch.load(os.path.join(dir, "ensemble.pth"), map_location=self.device, weights_only=True)
+        self.ensemble_model.load_state_dict(state_dict)
+        self.ensemble_model = self.ensemble_model.to(self.device)
+        self.ensemble_model.eval()
 
     def predict(self, masks, img=None, img_path: str = None, mask_size=None):
         mask_size = mask_size or MASK_SIZE
         logits = np.array([model.predict(masks, img, img_path, mask_size).flatten() for model in self.models[0:self.m]])
-        ensemble_logits = logits.T @ self.ensemble_weights + self.bias
-        ensemble_proba = 1 / (1 + np.exp(-ensemble_logits))
+        
+        with torch.no_grad():
+            ensemble_logits = self.ensemble_model(torch.tensor(logits))
+            ensemble_proba = torch.softmax(ensemble_logits, dim=1)
 
-        return ensemble_proba
+        return ensemble_proba.cpu().numpy()

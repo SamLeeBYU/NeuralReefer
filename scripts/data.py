@@ -68,13 +68,12 @@ class MaskLoader(Dataset):
         print(f"Loading dataset from {file_path}")
         data = torch.load(file_path, weights_only=False)
 
+        self.labels = data["labels"]
+        self.classes = data["classes"]
+
+        self.transform, self.img_data = self.augment(data["img_data"], self.transform, random=randomAugment)
         #This helps the coral filter models learn on 'new' data that's representative of the true distribution of masks
         #This is necessary for ensemble learning
-        self.transform, data["img_data"] = self.augment(data["img_data"], self.transform, random=randomAugment)
-
-        self.labels = data["labels"]
-        self.img_data = data["img_data"]
-        self.classes = data["classes"]
 
         #Shuffle labels (is the model actually learning?)
         # indices = np.arange(len(self.labels))

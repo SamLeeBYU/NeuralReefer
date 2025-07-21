@@ -44,3 +44,16 @@ class CoralClassifier(nn.Module):
 
     def forward(self, x):
         return self.backbone(x)
+
+class EnsembleOptimizer(torch.nn.Module):
+    def __init__(self, M, K):
+        super().__init__()
+        self.M = M
+        self.K = K
+        self.weights = torch.nn.Parameter(torch.ones(M, K) / K)
+
+    def forward(self, X):  # X: [N, M, K]
+        # Normalize each model's weights across K classes
+        norm_weights = self.weights / self.weights.sum(dim=1, keepdim=True)  # shape: [M, K]
+        z = torch.einsum('nmk,mk->nk', X, norm_weights)  # Weighted sum
+        return z
