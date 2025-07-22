@@ -6,6 +6,8 @@ data/test/
 data/train/*.jpg
 !data/README.md
 
+scripts/coralnet.py
+
 # Model checkpoints
 models/filter/
 !models/README.md

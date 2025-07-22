@@ -171,38 +171,108 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         save_dir = Path(f"figures/segmentation.v.{VERSION}")
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        accuracies = np.zeros(len(images))
+        pixel_accuracies = np.zeros(len(images))
+        #class_accuracies = np.zeros(len(images)) (TBD)
+
         coral_cover_true = np.zeros(len(images))
         coral_cover_pred = np.zeros(len(images))
+
+        pct_bleached_true = np.zeros(len(images))
+        pct_bleached_pred = np.zeros(len(images))
+
+        genus_names = sorted(set(
+            k.split(":")[0] for k in coral_segmenter.coral_filter.classes
+            if ":bleached" in k or ":healthy" in k
+        ))
+
+        coral_cover_class_healthy_true = np.zeros((len(images), len(genus_names)))
+        coral_cover_class_healthy_pred = np.zeros((len(images), len(genus_names)))
+        coral_cover_class_true = np.zeros((len(images), len(genus_names)))
+        coral_cover_class_pred = np.zeros((len(images), len(genus_names)))
 
         print(f"{'Idx':>4} | {'Acc':>6} | {'Avg Acc':>8} | {'True CC':>8} | {'Avg True CC':>12} | {'Pred CC':>8} | {'Avg Pred CC':>12}")
         print("-" * 78)
 
         for i, image in enumerate(images):
-            masks = coral_segmenter.predict(img_path = image, init_models=(i == 0), verbose=VERBOSE)
-            genus_labels, _, gt_masks = coral_segmenter.get_gt_masks(image)
+            masks, labels = coral_segmenter.predict(img_path = image, init_models=(i == 0), verbose=VERBOSE)
+            pred_labels = coral_segmenter.coral_filter.get_class_names(labels, coral_segmenter.coral_filter.classes)
+            genus_labels, bleach_labels, gt_masks = coral_segmenter.get_gt_masks(image)
+            ml_labels = genus_labels + np.where(bleach_labels == 1, ":healthy", ":bleached")
+            
             gt_masks = [segmentation for j, segmentation in enumerate(gt_masks) if genus_labels[j] != "noncoral"]
+            gt_labels = [ml_labels[j] for j in range(len(ml_labels)) if genus_labels[j] != "noncoral"]
 
-            accuracies[i] = coral_segmenter.accuracy(masks, gt_masks)
+            pixel_accuracies[i] = coral_segmenter.accuracy(masks, gt_masks)
             coral_cover_true[i] = coral_segmenter.coral_cover(gt_masks, cs=coral_segmenter.crop_space)
             coral_cover_pred[i] = coral_segmenter.coral_cover(masks, cs=coral_segmenter.crop_space)
 
-            print(f"{i:>4} | {accuracies[i]:6.3f} | {accuracies[:i+1].mean():8.3f} "
+            # Bleached coverage
+            pct_bleached_true[i] = coral_segmenter.coral_cover([
+                gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].split(":")[-1] == "bleached"
+            ], cs=coral_segmenter.crop_space)
+
+            pct_bleached_pred[i] = coral_segmenter.coral_cover([
+                masks[j] for j in range(len(pred_labels)) if pred_labels[j].split(":")[-1] == "bleached"
+            ], cs=coral_segmenter.crop_space)
+
+            # Class-wise cover (bleached + healthy together)
+            for g, genus in enumerate(genus_names):
+                coral_cover_class_true[i, g] = coral_segmenter.coral_cover([
+                    gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].startswith(genus + ":")
+                ], cs=coral_segmenter.crop_space)
+
+                coral_cover_class_pred[i, g] = coral_segmenter.coral_cover([
+                    masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(genus + ":")
+                ], cs=coral_segmenter.crop_space)
+
+            # Class-wise healthy cover only
+            cc_true_healthy = []
+            cc_pred_healthy = []
+            for k in range(coral_segmenter.coral_filter.k):  # exclude noncoral
+                class_name = coral_segmenter.coral_filter.get_class_names([k], coral_segmenter.coral_filter.classes)[0]
+                if not class_name.endswith(":healthy"):
+                    continue
+            
+                cc_true_healthy.append(coral_segmenter.coral_cover([
+                    gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j] == class_name
+                ], cs=coral_segmenter.crop_space))
+
+                cc_pred_healthy.append(coral_segmenter.coral_cover([
+                    masks[j] for j in range(len(pred_labels)) if pred_labels[j] == class_name
+                ], cs=coral_segmenter.crop_space))
+
+            coral_cover_class_healthy_true[i, :] = cc_true_healthy
+            coral_cover_class_healthy_pred[i, :] = cc_pred_healthy
+
+            print(f"{i:>4} | {pixel_accuracies[i]:6.3f} | {pixel_accuracies[:i+1].mean():8.3f} "
                 f"| {coral_cover_true[i]:8.3f} | {coral_cover_true[:i+1].mean():12.3f} "
                 f"| {coral_cover_pred[i]:8.3f} | {coral_cover_pred[:i+1].mean():12.3f}")
 
             if SAVE_IMG:
-                save_path = save_dir / f"{Path(image).name.split('_')[0]}_{accuracies[i]:.4f}.png"
+                save_path = save_dir / f"{Path(image).name.split('_')[0]}_{pixel_accuracies[i]:.4f}.png"
                 coral_segmenter.show_masks_side_by_side(gt_masks, masks, figsize=FIG_SIZE, save_path=save_path)
             
         print("-" * 78)
         
         predictions = {
             'image': images,
-            'accuracy': accuracies,
+            'accuracy': pixel_accuracies,
             'coral_cover': coral_cover_true,
-            'coral_cover_pred': coral_cover_pred
+            'coral_cover_pred': coral_cover_pred,
+            'pct_bleached_true': pct_bleached_true,
+            'pct_bleached_pred': pct_bleached_pred
         }
+
+        # Add genus-wise total coral cover (bleached + healthy)
+        for g, genus in enumerate(genus_names):
+            predictions[f'cover_true__{genus}'] = coral_cover_class_true[:, g]
+            predictions[f'cover_pred__{genus}'] = coral_cover_class_pred[:, g]
+
+        # Add genus-wise healthy coral cover only
+        for g, genus in enumerate(genus_names):
+            predictions[f'cover_healthy_true__{genus}'] = coral_cover_class_healthy_true[:, g]
+            predictions[f'cover_healthy_pred__{genus}'] = coral_cover_class_healthy_pred[:, g]
+
         get_image_id = lambda path: path.split("\\")[-1].split("_")[0]
         predictions['image_id'] = [get_image_id(img) for img in images]
         predictions_df = pd.DataFrame(predictions)

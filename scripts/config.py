@@ -23,6 +23,8 @@ REMAP_PATH = "data/remap.json"
 
 #Do you want to save the predicted annotations as an image?
 SAVE_MASKS = True
+#How many pixels in the image file are not part of the actual image
+CROP_SPACE = 7130
 
 #Training Variables #################################################################################
 #(You don't have to touch these parameters if you don't wish to train the model on new data)
@@ -51,31 +53,33 @@ CREATE_MASK_DATASET = False
 TOLERANCE = 0.2 
 #These are the size of the mask inputs that will be used for classification
 MASK_SIZE = (128, 128)
+#Minimum area needed to accept a proposed mask
+MIN_AREA = 1000
 
 #For training the coral classifier
-TRAIN_CORAL_FILTER = True
+TRAIN_CORAL_FILTER = False
 #Number of models in the ensemble
 M = 11
 #Max number of iterations through the entire data set
-EPOCHS = 50
+EPOCHS = 500
 #How many data points are passed forward through the model before the gradient is updated
 BATCH_SIZE = 32
 #The 'size' of the step used for each gradient update
-LR = 1e-4/2
+LR = 5*1e-5
 #Regularization parameter
-WEIGHT_DECAY = 1e-5
+WEIGHT_DECAY = 5*1e-6
 #How much of the data is perserved to train the ensembler
 SPLIT = 0.3
 #Loss Function for the Coral Classifier Model
 LOSS_FN = nn.CrossEntropyLoss()
 #Patience parameter for early stopping
-PATIENCE = 5
+PATIENCE = 30
 #Class Dictionary File
 CLASSES_FILE = "data/classes.json"
 
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
-EVAL = False
+EVAL = True
 #Optionally, save the side-by-side comparisons
 SAVE_IMG = False
 FIG_SIZE = (16, 9)

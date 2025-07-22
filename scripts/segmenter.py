@@ -33,7 +33,7 @@ from skopt import gp_minimize, gbrt_minimize, forest_minimize  # Optimization al
 from skopt.utils import use_named_args                         # Decorators for search
 from skopt.learning import ExtraTreesRegressor                 # Surrogate model for Bayesian Optimization
 
-from config import SAM2_PATH, HYPERPARAM_FILE, REMAP_PATH, MASK_SIZE, IMG_SIZE, VERBOSE
+from config import SAM2_PATH, HYPERPARAM_FILE, REMAP_PATH, MASK_SIZE, IMG_SIZE, VERBOSE, MIN_AREA, CROP_SPACE
 from utils import convert_json_compat, restore_prints, suppress_prints, timer
 
 sys.path.append(SAM2_PATH)
@@ -404,10 +404,11 @@ class SAM2Segmenter:
                 #Data Augmentation Parameters
                 whiteBalance=None, redBoost = None, clipLimit = None, tileGridSize = None, gamma = None,
                 #Merging parameters
-                overlap=None, min_area=400,
+                overlap=None, min_area=None,
                 #Runtime arguments
                 init_models=True, verbose=True, keep_all=False):
         
+        min_area = min_area or MIN_AREA
         overlap = overlap or self.nr_params['overlap']
 
         #Load in the image using the augmentations needed for the segmentation model
@@ -443,10 +444,15 @@ class SAM2Segmenter:
                 return masks #np.stack([mask['segmentation'] for mask in sorted_masks])
             else:
                 #Filter out overlapping masks
-                return self.merge(masks, min_area, overlap, verbose)
+                return self.merge(masks, min_area, overlap, verbose)[0]
 
-    def merge(self, masks, min_area=400, overlap=0.1, verbose=True):
-        sorted_masks = sorted(masks, key=lambda x: x["predicted_iou"], reverse=True)
+    def merge(self, masks, min_area=None, overlap=0.1, verbose=True):
+        min_area = min_area or MIN_AREA
+        
+        mask_idx = np.argsort([-m["predicted_iou"] for m in masks])
+        sorted_masks = [masks[i] for i in mask_idx]
+        kept = []
+
         if len(sorted_masks) > 0:
             seg_map = np.zeros_like(sorted_masks[0]['segmentation'], dtype=np.uint16)
             occupancy_mask = np.zeros_like(sorted_masks[0]['segmentation'], dtype=bool)
@@ -462,15 +468,15 @@ class SAM2Segmenter:
                     continue
 
                 mask[occupancy_mask] = 0
-                
                 seg_map[mask] = i+1
                 occupancy_mask[mask] = 1
+                kept.append(mask_idx[i])
 
             if verbose:
                 print(f"Found {len(np.unique(seg_map))-1} objects.")
-            return self.one_hot_encode(seg_map)
+            return self.one_hot_encode(seg_map), np.array(kept)
         else:
-            return np.zeros((1, 1024, 1024), dtype=bool)
+            return np.zeros((1, 1024, 1024), dtype=bool), np.array(kept)
   
     @staticmethod
     def one_hot_encode(seg_map):
@@ -642,11 +648,11 @@ class SAM2Segmenter:
 class CoralSegmenter(SAM2Segmenter):
 
     def __init__(self, config_path, checkpoint_path, coral_filter: CoralFilterEnsembler, annotation_path = None,
-                 large_feature_params=None, small_feature_params=None, nr_params=None, device=None):
+                 large_feature_params=None, small_feature_params=None, nr_params=None, device=None, cs=None):
         
         super().__init__(config_path, checkpoint_path, annotation_path=annotation_path, large_feature_params=large_feature_params, small_feature_params=small_feature_params, nr_params=nr_params, device=device)
         self.coral_filter = coral_filter
-        self.crop_space = 7130
+        self.crop_space = cs or CROP_SPACE
 
     # Automatic SAM2 Calibration Algorithm (ASCA) ################################################################
     def predict(self, img_path=None, img: Image=None, large_feature_params=None, small_feature_params=None,             
@@ -656,8 +662,9 @@ class CoralSegmenter(SAM2Segmenter):
                 redBoost=None,
                 gamma=None,
                 overlap=None,
-                min_area=100, mask_size=None, coral_thresh=0.5, init_models=True, verbose=True):
+                min_area=None, mask_size=None, coral_thresh=0.5, init_models=True, verbose=True):
         
+        min_area = min_area or MIN_AREA
         mask_size = mask_size or MASK_SIZE
         overlap = overlap or self.nr_params['overlap']
 
@@ -681,13 +688,14 @@ class CoralSegmenter(SAM2Segmenter):
             coral_masks_X = np.stack([mask['segmentation'] for mask in all_coral_masks])
 
             #NOTE: Computation time for this operation may vary depending on the size of the coral filter ensembler used (e.g. how many submodules there are)
-            is_coral = self.coral_filter.predict(coral_masks_X, image, mask_size=mask_size) >= coral_thresh
+            coral_classes = np.argmax(self.coral_filter.predict(coral_masks_X, image, mask_size=mask_size), axis=1)
+            is_coral = coral_classes != self.coral_filter.noncoral_class
             coral_masks = [mask for i, mask in enumerate(all_coral_masks) if is_coral[i]]
 
             #Merge masks (or 'consolidate' as Calvin says)
-            coral_masks_merged = self.merge(coral_masks, min_area, overlap, verbose)
+            coral_masks_merged, kept = self.merge(coral_masks, min_area, overlap, verbose)
 
-            return coral_masks_merged
+            return coral_masks_merged, coral_classes[is_coral][kept]
     
     @staticmethod
     def coral_cover(masks, area=1024*1024, cs=0):
