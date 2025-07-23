@@ -6,8 +6,6 @@ This module centralizes all file paths and key parameter settings
 for easy access and modification.
 """
 
-import torch.nn as nn
-
 #Trained models / tuned hyperparameters
 FILTER_MODELS_DIR = "models/filter"
 HYPERPARAM_FILE = f"data/segmentation/SAM2hyperparameters.json"
@@ -28,8 +26,8 @@ CROP_SPACE = 7130
 
 #Training Variables #################################################################################
 #(You don't have to touch these parameters if you don't wish to train the model on new data)
-VERSION = 3.0
-VERBOSE = False
+VERSION = 3.1
+VERBOSE = True
 
 #Where coco annotations (from roboflow) and images are located
 TRAIN_DIR = "data/train"
@@ -50,16 +48,16 @@ K = 30
 CREATE_MASK_DATASET = False
 #I've found that lower tolerance is generally better (by reducing noise in the training data)
 #The tradeoff is that with lower tolerance, some of the big proposed masks will be thrown out of the training set
-TOLERANCE = 0.2 
+TOLERANCE = 0.2
 #These are the size of the mask inputs that will be used for classification
 MASK_SIZE = (128, 128)
 #Minimum area needed to accept a proposed mask
 MIN_AREA = 1000
 
 #For training the coral classifier
-TRAIN_CORAL_FILTER = False
+TRAIN_CORAL_FILTER = True
 #Number of models in the ensemble
-M = 11
+M = 17
 #Max number of iterations through the entire data set
 EPOCHS = 500
 #How many data points are passed forward through the model before the gradient is updated
@@ -70,18 +68,20 @@ LR = 5*1e-5
 WEIGHT_DECAY = 5*1e-6
 #How much of the data is perserved to train the ensembler
 SPLIT = 0.3
-#Loss Function for the Coral Classifier Model
-LOSS_FN = nn.CrossEntropyLoss()
 #Patience parameter for early stopping
-PATIENCE = 30
+PATIENCE = 50
 #Class Dictionary File
 CLASSES_FILE = "data/classes.json"
+#Weight for increasing recall
+NEG_WEIGHT = 0.3/0.7
+#Which ResNet backbone the classifiers will use
+RES = 34
 
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
 EVAL = True
 #Optionally, save the side-by-side comparisons
-SAVE_IMG = False
+SAVE_IMG = True
 FIG_SIZE = (16, 9)
 #Data from yellowfin to be merged with prediction metric data
 METADATA = "data/metadata/Day3_Photo_MetaData_sr4.xlsx"

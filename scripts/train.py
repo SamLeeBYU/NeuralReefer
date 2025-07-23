@@ -12,10 +12,10 @@ Run as a standalone script or import train
 """
 
 #TODO:
-# 1. Redownload data / fix labels for misspellings
-# 2. Retrain submodules
-# 3. Adjust ensemble meta learner
-# 4. Adjust show_masks/show_masks_side_by_side to show same color for same genus
+# - Retrain ensemble learner on different loss function than submodels
+# - Adjust show_masks/show_masks_side_by_side to show same color for same genus
+# - Recode evaluate method to capture desired metrics
+# - Create plots/slides for Thursday lab meeting
 
 from config import (
     VERSION, TRAIN_DIR, EXT,
@@ -23,7 +23,7 @@ from config import (
     TUNE_SEGMENTER, N_CALLS, K, VERBOSE,
     CREATE_MASK_DATASET, MASK_SIZE, TOLERANCE, MASK_DATA_PATH,
 
-    TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR, LOSS_FN, PATIENCE,
+    TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR, PATIENCE,
 
     EVAL, SAVE_IMG, FIG_SIZE, METADATA
 )
@@ -146,17 +146,17 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
                             transform = MASK_TRANSFORM)
         maskloader.save_data(MASK_DATA_PATH)
             
-
     # Train the model to filter out non-coral masks
     coral_filter = CoralFilterEnsembler(
         base_dataset=MASK_DATA_PATH if train_coral_filter else None,
         filter_transform=MASK_TRANSFORM,
-        device=device, loss_fn=LOSS_FN,
+        device=device,
         m=M, epochs=EPOCHS, batch_size=BATCH_SIZE, lr=LR, weight_decay=WEIGHT_DECAY, split=SPLIT
     )
 
     if train_coral_filter:
-        coral_filter.train(submodel_patience=PATIENCE)
+        coral_filter.train()
+        coral_filter.validate()
         coral_filter.save_models(FILTER_MODELS_DIR)
 
     #####################################################################################################################################
@@ -197,7 +197,10 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             masks, labels = coral_segmenter.predict(img_path = image, init_models=(i == 0), verbose=VERBOSE)
             pred_labels = coral_segmenter.coral_filter.get_class_names(labels, coral_segmenter.coral_filter.classes)
             genus_labels, bleach_labels, gt_masks = coral_segmenter.get_gt_masks(image)
-            ml_labels = genus_labels + np.where(bleach_labels == 1, ":healthy", ":bleached")
+            if genus_labels is not None:
+                ml_labels = genus_labels + np.where(bleach_labels == 1, ":healthy", ":bleached")
+            else:
+                ml_labels = np.array([])
             
             gt_masks = [segmentation for j, segmentation in enumerate(gt_masks) if genus_labels[j] != "noncoral"]
             gt_labels = [ml_labels[j] for j in range(len(ml_labels)) if genus_labels[j] != "noncoral"]
@@ -249,8 +252,11 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
                 f"| {coral_cover_pred[i]:8.3f} | {coral_cover_pred[:i+1].mean():12.3f}")
 
             if SAVE_IMG:
-                save_path = save_dir / f"{Path(image).name.split('_')[0]}_{pixel_accuracies[i]:.4f}.png"
-                coral_segmenter.show_masks_side_by_side(gt_masks, masks, figsize=FIG_SIZE, save_path=save_path)
+                save_path_pred = save_dir / f"{Path(image).name.split('_')[0]}_{pixel_accuracies[i]:.4f}.png"
+                save_path_true = save_dir / f"{Path(image).name.split('_')[0]}_gt.png"
+                coral_segmenter.show_masks(masks, coral_segmenter.color_map, pred_labels, show=False, save_path=save_path_pred)
+                coral_segmenter.show_masks(gt_masks, coral_segmenter.color_map, gt_labels, show=False, save_path=save_path_true)
+                #coral_segmenter.show_masks_side_by_side(gt_masks, masks, figsize=FIG_SIZE, save_path=save_path)
             
         print("-" * 78)
         

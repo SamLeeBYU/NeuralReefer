@@ -1,15 +1,15 @@
 {
-  "branching_acropora:bleached": 0,
-  "branching_acropora:healthy": 1,
-  "finger-knob_porites:bleached": 2,
-  "finger-knob_porites:healthy": 3,
-  "finger_acropora:bleached": 4,
-  "finger_acropora:healthy": 5,
-  "mounding_:bleached": 6,
-  "mounding_:healthy": 7,
-  "noncoral": 8,
-  "oddball:bleached": 9,
-  "oddball:healthy": 10,
-  "pocillopora_:bleached": 11,
-  "pocillopora_:healthy": 12
+    "branching_acropora:bleached": 0,
+    "branching_acropora:healthy": 1,
+    "finger-knob_porites:bleached": 2,
+    "finger-knob_porites:healthy": 3,
+    "finger_acropora:bleached": 4,
+    "finger_acropora:healthy": 5,
+    "mounding_:bleached": 6,
+    "mounding_:healthy": 7,
+    "noncoral": 8,
+    "oddball:bleached": 9,
+    "oddball:healthy": 10,
+    "pocillopora_:bleached": 11,
+    "pocillopora_:healthy": 12
 }

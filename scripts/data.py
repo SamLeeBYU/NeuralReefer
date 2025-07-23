@@ -13,12 +13,12 @@ from torchvision import transforms
 import torchvision.transforms.functional as TF
 from PIL import Image
 
-from transforms import MASK_TRANSFORM, CLAHETransform
+from transforms import MASK_TRANSFORM, CLAHETransform, inv_norm
 from config import MASK_SIZE
 
 class MaskLoader(Dataset):
 
-    def __init__(self, images = None, load_file = None, segmentation_model = None, mask_size = None, tolerance = 0.1, transform=None, randomAugment=False):
+    def __init__(self, images = None, load_file = None, segmentation_model = None, mask_size = None, tolerance = 0.1, transform=None, randomAugment=False, balance=False):
 
         """
         PyTorch dataset class for constructing a labeled image crop dataset for binary coral classification.
@@ -52,7 +52,11 @@ class MaskLoader(Dataset):
         if load_file:
             self._load_dataset(load_file, randomAugment)
         elif images:
-            self._create_dataset(images, tolerance)    
+            self._create_dataset(images, tolerance)
+
+        if balance:
+            self._oversample(class_cap=4000)
+            self._undersample(class_cap=4000)
 
     def __len__(self):
         #Needed for a pytorch data loader
@@ -72,6 +76,7 @@ class MaskLoader(Dataset):
         self.classes = data["classes"]
 
         self.transform, self.img_data = self.augment(data["img_data"], self.transform, random=randomAugment)
+        
         #This helps the coral filter models learn on 'new' data that's representative of the true distribution of masks
         #This is necessary for ensemble learning
 
@@ -81,16 +86,87 @@ class MaskLoader(Dataset):
 
         # self.labels = self.labels[indices]
 
+    def _oversample(self, class_cap=1000):
+        print(f"Applying oversampling to balance minority classes (cap = {class_cap})...")
+
+        labels_np = torch.argmax(self.labels, dim=1).numpy()
+        class_counts = np.bincount(labels_np)
+        new_imgs = []
+        new_labels = []
+
+        index_to_class = {v: k for k, v in self.classes.items()}
+        for class_idx, count in enumerate(class_counts):
+            if count >= class_cap:
+                continue
+
+            indices = np.where(labels_np == class_idx)[0]
+            needed = class_cap - count
+
+            sampled_idx = np.random.choice(indices, size=needed, replace=True)
+
+            for i in tqdm(range(needed), desc=f"Oversampling class {index_to_class.get(class_idx, class_idx)}"):
+                img = self.img_data[sampled_idx[i]]
+                label = self.labels[sampled_idx[i]]
+
+                # Apply random augmentation to simulate new data
+                _, aug_img = self.augment(img.unsqueeze(0), self.transform, random=True)
+                new_imgs.append(aug_img.squeeze(0))
+                new_labels.append(label)
+
+        new_imgs = [img.unsqueeze(0) for img in new_imgs]
+        new_labels = [label.unsqueeze(0) for label in new_labels]
+        if new_imgs:
+            self.img_data = torch.cat([self.img_data] + new_imgs)
+            self.labels = torch.cat([self.labels] + new_labels)
+
+    def _undersample(self, class_cap=1000):
+        print(f"Applying undersampling to limit overrepresented classes (cap = {class_cap})...")
+
+        labels_np = torch.argmax(self.labels, dim=1).numpy()
+        class_counts = np.bincount(labels_np)
+
+        keep_indices = []
+
+        index_to_class = {v: k for k, v in self.classes.items()}
+        for class_idx, count in enumerate(class_counts):
+            indices = np.where(labels_np == class_idx)[0]
+
+            if count <= class_cap:
+                keep_indices.extend(indices)
+            else:
+                sampled_idx = np.random.choice(indices, size=class_cap, replace=False)
+                keep_indices.extend(sampled_idx)
+                print(f"Undersampling class {index_to_class.get(class_idx, class_idx)} from {count} → {class_cap}")
+
+        keep_indices = np.sort(keep_indices)
+        self.img_data = self.img_data[keep_indices]
+        self.labels = self.labels[keep_indices]
+
     @staticmethod
     def augment(images: torch.tensor, base_transforms, random=True):
         if random:
             #We create random augmentations that vary by each generation
             #We don't apply any colorization / color augmentations as those may be sensitive to the training data used
             augment_transforms = transforms.Compose([
+                transforms.RandomAffine(
+                    degrees = np.random.uniform(0, 5),
+                    scale=(0.9, 1.1),             
+                    shear=np.random.uniform(0, 10), 
+                ),
                 transforms.RandomRotation(degrees=np.random.uniform(5, 45)),
                 transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomAffine(
+                    degrees = np.random.uniform(0, 5),
+                    scale=(0.9, 1.1),              
+                    shear=np.random.uniform(0, 10),  
+                ),
                 transforms.RandomRotation(degrees=np.random.uniform(5, 45)),
                 transforms.RandomVerticalFlip(p=0.5),
+                transforms.RandomAffine(
+                    degrees = np.random.uniform(0, 5),
+                    scale=(0.9, 1.1),               
+                    shear=np.random.uniform(0, 10),
+                ),
                 transforms.RandomRotation(degrees=np.random.uniform(5, 45)),
             ])
         else:

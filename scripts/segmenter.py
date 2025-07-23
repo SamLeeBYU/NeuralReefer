@@ -531,7 +531,7 @@ class SAM2Segmenter:
         ax.imshow(mask_image)
 
     @staticmethod
-    def _show_single_mask(ax, mask, color=(0, 1, 0, 0.4), borders=True):
+    def _show_single_mask(ax, mask, color=(0, 1, 0, 0.4), label=None, borders=True):
         h, w = mask.shape
         img = np.zeros((h, w, 4))
         img[mask] = color
@@ -540,6 +540,21 @@ class SAM2Segmenter:
             contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
             cv2.drawContours(img, contours, -1, (0, 0, 0, 0.8), thickness=1)
         ax.imshow(img)
+
+        if label:
+            # Find bounding box of mask
+            ys, xs = np.where(mask)
+            if len(xs) > 0 and len(ys) > 0:
+                x_center = (xs.min() + xs.max()) // 2
+                y_center = (ys.min() + ys.max()) // 2
+                ax.text(
+                    x_center, y_center,
+                    label,
+                    fontsize=8,
+                    color='black',
+                    ha='center', va='center',
+                    bbox=dict(facecolor='white', edgecolor='none', boxstyle='round,pad=0.2', alpha=0.8)
+                )
 
     @staticmethod
     def show_anns(anns, borders=True):
@@ -564,16 +579,31 @@ class SAM2Segmenter:
 
         ax.imshow(img)
 
-    def show_masks(self, masks, return_image=False, show=True, save_path=None):
+    def show_masks(self, masks, color_map=None, labels=None, return_image=False, show=True, save_path=None):
+
+        if labels is not None:
+            assert len(masks) == len(labels), "Each mask must have a corresponding label"
+            if color_map is None:
+                unique_labels = sorted(set(labels))
+                color_map = {
+                    label: np.random.rand(3).tolist() + [0.6]
+                    for label in unique_labels
+                }
+
         masks = [{'segmentation': mask, 'area': mask.sum()} for mask in masks]
 
         fig = plt.figure(figsize=(10, 10))
-        ax = plt.Axes(fig, [0, 0, 1, 1])
+        ax = plt.Axes(fig, [0.05, 0.05, 0.9, 0.9])
         fig.add_axes(ax)
         ax.set_axis_off()
 
         ax.imshow(self.image)
-        self.show_anns(masks)
+        if labels is not None:
+            for mask, label in zip(masks, labels):
+                color = color_map[label]
+                self._show_single_mask(ax, mask['segmentation'], color=color, label=label)
+        else:
+            self.show_anns(masks)
 
         if save_path:
             fig.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=0)
@@ -592,7 +622,7 @@ class SAM2Segmenter:
 
     def show_masks_side_by_side(self, gt_masks, pred_masks, iou_thresh=0.5, figsize=(8, 4.5), save_path=None):
         fig, axes = plt.subplots(1, 2, figsize=figsize)
-        h, w = gt_masks[0].shape if len(gt_masks) > 0 else pred_masks[0].shape
+        h, w = self.image.shape[:2]
 
         gt_anns = [{'segmentation': mask, 'area': mask.sum()} for mask in gt_masks]
         pred_anns = [{'segmentation': mask, 'area': mask.sum()} for mask in pred_masks]
@@ -601,8 +631,6 @@ class SAM2Segmenter:
         used_preds = set()
 
         # Match predicted masks to ground truth by IoU
-        # NOTE: This is not efficient. In the future, I will use a naive merging algorithm by subtracting the predicted masks from the gt masks and determine a match
-        #       by an overlap threshold to vectorize this operation.
         for i, gmask in enumerate(gt_masks):
             best_iou = 0
             best_j = -1
@@ -653,6 +681,7 @@ class CoralSegmenter(SAM2Segmenter):
         super().__init__(config_path, checkpoint_path, annotation_path=annotation_path, large_feature_params=large_feature_params, small_feature_params=small_feature_params, nr_params=nr_params, device=device)
         self.coral_filter = coral_filter
         self.crop_space = cs or CROP_SPACE
+        self.color_map = self._create_color_map(self.coral_filter.classes)
 
     # Automatic SAM2 Calibration Algorithm (ASCA) ################################################################
     def predict(self, img_path=None, img: Image=None, large_feature_params=None, small_feature_params=None,             
@@ -694,9 +723,20 @@ class CoralSegmenter(SAM2Segmenter):
 
             #Merge masks (or 'consolidate' as Calvin says)
             coral_masks_merged, kept = self.merge(coral_masks, min_area, overlap, verbose)
+            if len(kept) > 0:
+                return coral_masks_merged, coral_classes[is_coral][kept]
+            else:
+                return np.array([]), np.array([])
 
-            return coral_masks_merged, coral_classes[is_coral][kept]
-    
+    @staticmethod
+    def _create_color_map(classes):
+        unique_labels = sorted(set(classes.keys()))
+        label_to_color = {
+            label: np.random.rand(3).tolist() + [0.6]
+            for label in unique_labels
+        }
+        return label_to_color
+
     @staticmethod
     def coral_cover(masks, area=1024*1024, cs=0):
         return (np.sum(masks, axis=0).astype(bool)).sum() / (area - cs)

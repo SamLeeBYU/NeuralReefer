@@ -10,6 +10,7 @@ scripts/coralnet.py
 
 # Model checkpoints
 models/filter/
+models/classifiers/
 !models/README.md
 
 # Figures and plots
