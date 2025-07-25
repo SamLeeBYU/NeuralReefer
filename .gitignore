@@ -10,11 +10,13 @@ scripts/coralnet.py
 
 # Model checkpoints
 models/filter/
+modesl/filter_5/
 models/classifiers/
 !models/README.md
 
 # Figures and plots
 !figures/README.md
+figures/graphics
 
 # Segmentation masks or cache
 *.npy

@@ -142,14 +142,12 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             device = device
         )
 
-        maskloader = MaskLoader(images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE,
-                            transform = MASK_TRANSFORM)
+        maskloader = MaskLoader(images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE)
         maskloader.save_data(MASK_DATA_PATH)
             
     # Train the model to filter out non-coral masks
     coral_filter = CoralFilterEnsembler(
         base_dataset=MASK_DATA_PATH if train_coral_filter else None,
-        filter_transform=MASK_TRANSFORM,
         device=device,
         m=M, epochs=EPOCHS, batch_size=BATCH_SIZE, lr=LR, weight_decay=WEIGHT_DECAY, split=SPLIT
     )

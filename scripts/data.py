@@ -9,16 +9,17 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import Dataset
-from torchvision import transforms
+import torchvision.transforms.v2 as tv2
 import torchvision.transforms.functional as TF
 from PIL import Image
+import matplotlib.pyplot as plt
 
-from transforms import MASK_TRANSFORM, CLAHETransform, inv_norm
-from config import MASK_SIZE
+from transforms import MASK_TRANSFORM, MASK_TRANSFORM_AUGMENT, inv_norm
+from config import MASK_SIZE, UPSAMPLE
 
 class MaskLoader(Dataset):
 
-    def __init__(self, images = None, load_file = None, segmentation_model = None, mask_size = None, tolerance = 0.1, transform=None, randomAugment=False, balance=False):
+    def __init__(self, images = None, load_file = None, transform_fn = None, segmentation_model = None, mask_size = None, tolerance = 0.1, balance=False):
 
         """
         PyTorch dataset class for constructing a labeled image crop dataset for binary coral classification.
@@ -36,27 +37,24 @@ class MaskLoader(Dataset):
             segmentation_model (object, optional): Instance of SAM2Segmenter or compatible model for mask generation.
             mask_size (Tuple[int, int], optional): Size to which image crops are resized.
             tolerance (float): Overlap threshold for excluding predicted masks that resemble ground truth.
-            transform (callable, optional): Transformations to apply to image crops for regularization and normalization (for ResNet)
-            randomAugment (bool): Whether to apply random augmentations to the loaded dataset.
         """
 
         self.segmentation_model = segmentation_model
         self.mask_size = mask_size or MASK_SIZE
+        self.transform_fn = transform_fn or MASK_TRANSFORM_AUGMENT
 
         self.labels = None
         self.img_data = None
         self.classes = None
 
-        self.transform = transform or MASK_TRANSFORM
-
         if load_file:
-            self._load_dataset(load_file, randomAugment)
+            self._load_dataset(load_file)
         elif images:
             self._create_dataset(images, tolerance)
 
         if balance:
-            self._oversample(class_cap=4000)
-            self._undersample(class_cap=4000)
+            #This helps scale the gradient in our filter models appropriately to learn features of minority classes
+            self._oversample(class_cap=UPSAMPLE)
 
     def __len__(self):
         #Needed for a pytorch data loader
@@ -68,14 +66,17 @@ class MaskLoader(Dataset):
         y_i = self.labels[idx]
         return X_i, y_i
     
-    def _load_dataset(self, file_path, randomAugment=False):
+    def _load_dataset(self, file_path):
         print(f"Loading dataset from {file_path}")
         data = torch.load(file_path, weights_only=False)
 
         self.labels = data["labels"]
         self.classes = data["classes"]
 
-        self.transform, self.img_data = self.augment(data["img_data"], self.transform, random=randomAugment)
+        self.class_distribution = self.get_class_distribution(self.labels)
+
+        self.raw_data = data["img_data"]
+        self.img_data = self.augment(data["img_data"], self.transform_fn)
         
         #This helps the coral filter models learn on 'new' data that's representative of the true distribution of masks
         #This is necessary for ensemble learning
@@ -105,84 +106,53 @@ class MaskLoader(Dataset):
             sampled_idx = np.random.choice(indices, size=needed, replace=True)
 
             for i in tqdm(range(needed), desc=f"Oversampling class {index_to_class.get(class_idx, class_idx)}"):
-                img = self.img_data[sampled_idx[i]]
+                img = self.raw_data[sampled_idx[i]]
                 label = self.labels[sampled_idx[i]]
 
-                # Apply random augmentation to simulate new data
-                _, aug_img = self.augment(img.unsqueeze(0), self.transform, random=True)
-                new_imgs.append(aug_img.squeeze(0))
+                new_imgs.append(img)
                 new_labels.append(label)
 
-        new_imgs = [img.unsqueeze(0) for img in new_imgs]
-        new_labels = [label.unsqueeze(0) for label in new_labels]
         if new_imgs:
-            self.img_data = torch.cat([self.img_data] + new_imgs)
-            self.labels = torch.cat([self.labels] + new_labels)
+            new_imgs_batch = torch.stack(new_imgs)     # Shape: [B, C, H, W]
+            new_labels_batch = torch.stack(new_labels) # Shape: [B, K]
 
-    def _undersample(self, class_cap=1000):
-        print(f"Applying undersampling to limit overrepresented classes (cap = {class_cap})...")
+            new_augmented_imgs = self.augment(new_imgs_batch, self.transform_fn)
 
-        labels_np = torch.argmax(self.labels, dim=1).numpy()
-        class_counts = np.bincount(labels_np)
+            self.raw_data = torch.cat([self.raw_data, new_imgs_batch])
+            self.img_data = torch.cat([self.img_data, new_augmented_imgs])
+            self.labels   = torch.cat([self.labels, new_labels_batch])
 
-        keep_indices = []
+    def resample(self):
+        #resample data from augmentation distribution
+        self.img_data = self.augment(self.raw_data, self.transform_fn)
 
-        index_to_class = {v: k for k, v in self.classes.items()}
-        for class_idx, count in enumerate(class_counts):
-            indices = np.where(labels_np == class_idx)[0]
+    # def _undersample(self, class_cap=1000):
+    #     print(f"Applying undersampling to limit overrepresented classes (cap = {class_cap})...")
 
-            if count <= class_cap:
-                keep_indices.extend(indices)
-            else:
-                sampled_idx = np.random.choice(indices, size=class_cap, replace=False)
-                keep_indices.extend(sampled_idx)
-                print(f"Undersampling class {index_to_class.get(class_idx, class_idx)} from {count} → {class_cap}")
+    #     labels_np = torch.argmax(self.labels, dim=1).numpy()
+    #     class_counts = np.bincount(labels_np)
 
-        keep_indices = np.sort(keep_indices)
-        self.img_data = self.img_data[keep_indices]
-        self.labels = self.labels[keep_indices]
+    #     keep_indices = []
+
+    #     index_to_class = {v: k for k, v in self.classes.items()}
+    #     for class_idx, count in enumerate(class_counts):
+    #         indices = np.where(labels_np == class_idx)[0]
+
+    #         if count <= class_cap:
+    #             keep_indices.extend(indices)
+    #         else:
+    #             sampled_idx = np.random.choice(indices, size=class_cap, replace=False)
+    #             keep_indices.extend(sampled_idx)
+    #             print(f"Undersampling class {index_to_class.get(class_idx, class_idx)} from {count} → {class_cap}")
+
+    #     keep_indices = np.sort(keep_indices)
+    #     self.img_data = self.img_data[keep_indices]
+    #     self.labels = self.labels[keep_indices]
 
     @staticmethod
-    def augment(images: torch.tensor, base_transforms, random=True):
-        if random:
-            #We create random augmentations that vary by each generation
-            #We don't apply any colorization / color augmentations as those may be sensitive to the training data used
-            augment_transforms = transforms.Compose([
-                transforms.RandomAffine(
-                    degrees = np.random.uniform(0, 5),
-                    scale=(0.9, 1.1),             
-                    shear=np.random.uniform(0, 10), 
-                ),
-                transforms.RandomRotation(degrees=np.random.uniform(5, 45)),
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandomAffine(
-                    degrees = np.random.uniform(0, 5),
-                    scale=(0.9, 1.1),              
-                    shear=np.random.uniform(0, 10),  
-                ),
-                transforms.RandomRotation(degrees=np.random.uniform(5, 45)),
-                transforms.RandomVerticalFlip(p=0.5),
-                transforms.RandomAffine(
-                    degrees = np.random.uniform(0, 5),
-                    scale=(0.9, 1.1),               
-                    shear=np.random.uniform(0, 10),
-                ),
-                transforms.RandomRotation(degrees=np.random.uniform(5, 45)),
-            ])
-        else:
-            #A 'less' random version of the above augmentation
-            augment_transforms = transforms.Compose([
-                transforms.RandomRotation(degrees=15),
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandomVerticalFlip(p=0.5),
-                transforms.RandomRotation(degrees=15)
-            ])
-
-        #This instance's new transformation are whatever we added from the random augmentation + the base augmentation that every
-        #instance of this class experiences
-
+    def augment(images: torch.tensor, transform_fn):
         #This allows us to apply post-processing augmentations in a flexible way (so we don't have to apply augmentations in the _create_dataset method)
-        return  transforms.Compose(base_transforms.transforms + augment_transforms.transforms), augment_transforms(images)
+        return transform_fn(images.clone())
 
     def save_data(self, save_path):
         print(f"Saving dataset to {save_path}")
@@ -235,7 +205,7 @@ class MaskLoader(Dataset):
 
             for j, segmentation in enumerate(gt_masks_set[i]):
                 torch_mask = torch.tensor(segmentation)
-                img_data.append(self.extract(torch_image, torch_mask, self.mask_size, self.transform))
+                img_data.append(self.extract(torch_image, torch_mask, self.mask_size))
 
                 #Each ground truth mask automatically gets a genus/bleached label.
                 #Dead and algae (among the masks in the gt set) will get 'noncoral' as defined in remap.json
@@ -255,7 +225,7 @@ class MaskLoader(Dataset):
                 # tolerance = how much of the overlapping crop (difference between predicted mask and actual mask) that we'd be willing to accept as a 'separate' object
                 if overlap <= tolerance:
                     torch_mask = torch.tensor(pred_mask)
-                    img_data.append(self.extract(torch_image, torch_mask, self.mask_size, self.transform))
+                    img_data.append(self.extract(torch_image, torch_mask, self.mask_size))
                     labels.append("noncoral")
 
         #Normalize all noncoral:bleached, noncoral:healthy (if any exist) -> noncoral to align with extrapolated mask labels
@@ -266,10 +236,20 @@ class MaskLoader(Dataset):
 
         #Save the data as tensors objects for pytorch models
         self.img_data = torch.stack(img_data)
+        self.raw_data = torch.stack(img_data)
         self.labels = torch.nn.functional.one_hot(torch.tensor([self.classes[label] for label in labels]), num_classes=len(self.classes))
+        self.class_distribution = self.get_class_distribution(self.labels)
 
     @staticmethod
-    def extract(img, mask, output_size, transform_fn, padding=5):
+    def get_class_distribution(labels: torch.tensor):
+        class_indices = torch.argmax(labels, dim=1)                                   # shape: [N]
+        class_counts = torch.bincount(class_indices, minlength=labels.shape[1])       # shape: [K]
+        class_distribution = class_counts.float() / class_counts.sum()
+
+        return class_distribution
+
+    @staticmethod
+    def extract(img, mask, output_size, padding=5, tf=None):
         
         segmentation = img * mask
 
@@ -291,6 +271,16 @@ class MaskLoader(Dataset):
 
         squared_img = TF.pad(crop, padding, fill=0)
 
-        #NOTE: the transform_fn are the base augmentations we apply to each mask (namely normalizing the pixel values for ResNet)
-        
-        return transform_fn(TF.resize(squared_img, [output_size[0], output_size[1]]))
+        if tf is not None:
+            return tf(TF.resize(squared_img, [output_size[0], output_size[1]]))
+        return TF.resize(squared_img, [output_size[0], output_size[1]])
+
+    @staticmethod
+    def visualize_mask(mask, invnorm=False):
+
+        if invnorm:
+            mask = inv_norm(mask)
+
+        plt.figure(figsize=(4, 4))
+        plt.imshow(mask.cpu().numpy().transpose((1, 2, 0)))
+        plt.show()

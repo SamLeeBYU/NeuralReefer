@@ -7,7 +7,7 @@ for easy access and modification.
 """
 
 #Trained models / tuned hyperparameters
-FILTER_MODELS_DIR = "models/filter"
+FILTER_MODELS_DIR = "models/filter_res18_17"
 HYPERPARAM_FILE = f"data/segmentation/SAM2hyperparameters.json"
 MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.2.pt"
 
@@ -26,7 +26,7 @@ CROP_SPACE = 7130
 
 #Training Variables #################################################################################
 #(You don't have to touch these parameters if you don't wish to train the model on new data)
-VERSION = 3.1
+VERSION = 4.0
 VERBOSE = True
 
 #Where coco annotations (from roboflow) and images are located
@@ -59,7 +59,7 @@ TRAIN_CORAL_FILTER = True
 #Number of models in the ensemble
 M = 17
 #Max number of iterations through the entire data set
-EPOCHS = 500
+EPOCHS = 30
 #How many data points are passed forward through the model before the gradient is updated
 BATCH_SIZE = 32
 #The 'size' of the step used for each gradient update
@@ -69,19 +69,21 @@ WEIGHT_DECAY = 5*1e-6
 #How much of the data is perserved to train the ensembler
 SPLIT = 0.3
 #Patience parameter for early stopping
-PATIENCE = 50
+PATIENCE = 5
 #Class Dictionary File
 CLASSES_FILE = "data/classes.json"
 #Weight for increasing recall
-NEG_WEIGHT = 0.3/0.7
+NEG_WEIGHT = 0.25
 #Which ResNet backbone the classifiers will use
-RES = 34
+RES = 18
+#What is the minimum number of observations you want in each class? (synthetically oversample)
+UPSAMPLE = 4000
 
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
 EVAL = True
 #Optionally, save the side-by-side comparisons
-SAVE_IMG = True
+SAVE_IMG = False
 FIG_SIZE = (16, 9)
 #Data from yellowfin to be merged with prediction metric data
 METADATA = "data/metadata/Day3_Photo_MetaData_sr4.xlsx"

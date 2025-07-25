@@ -446,10 +446,13 @@ class SAM2Segmenter:
                 #Filter out overlapping masks
                 return self.merge(masks, min_area, overlap, verbose)[0]
 
-    def merge(self, masks, min_area=None, overlap=0.1, verbose=True):
+    def merge(self, masks, weights=None, min_area=None, overlap=0.1, verbose=True):
         min_area = min_area or MIN_AREA
+
+        if weights is None:
+            weights = np.ones(len(masks))
         
-        mask_idx = np.argsort([-m["predicted_iou"] for m in masks])
+        mask_idx = np.argsort([-m["predicted_iou"]*weights[i] for i, m in enumerate(masks)])
         sorted_masks = [masks[i] for i in mask_idx]
         kept = []
 
@@ -717,14 +720,20 @@ class CoralSegmenter(SAM2Segmenter):
             coral_masks_X = np.stack([mask['segmentation'] for mask in all_coral_masks])
 
             #NOTE: Computation time for this operation may vary depending on the size of the coral filter ensembler used (e.g. how many submodules there are)
-            coral_classes = np.argmax(self.coral_filter.predict(coral_masks_X, image, mask_size=mask_size), axis=1)
-            is_coral = coral_classes != self.coral_filter.noncoral_class
+            coral_classes_proba = self.coral_filter.predict(coral_masks_X, image, mask_size=mask_size)
+            coral_classes_p = np.abs(np.max(coral_classes_proba, axis=1)-1e-3)
+            weights = coral_classes_p #1/(1-coral_classes_p)
+            coral_classes_preds = np.argmax(coral_classes_proba, axis=1)
+            
+            is_coral = coral_classes_preds != self.coral_filter.noncoral_class
             coral_masks = [mask for i, mask in enumerate(all_coral_masks) if is_coral[i]]
 
             #Merge masks (or 'consolidate' as Calvin says)
-            coral_masks_merged, kept = self.merge(coral_masks, min_area, overlap, verbose)
+            coral_masks_merged, kept = self.merge(coral_masks, weights=weights[is_coral], min_area=min_area, overlap=overlap, verbose=verbose)
             if len(kept) > 0:
-                return coral_masks_merged, coral_classes[is_coral][kept]
+                #Corresponding class labels
+                #np.array(list(self.coral_filter.classes.keys()))[labels]
+                return coral_masks_merged, coral_classes_preds[is_coral][kept]
             else:
                 return np.array([]), np.array([])
 
