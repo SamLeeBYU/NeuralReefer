@@ -26,7 +26,7 @@ CROP_SPACE = 7130
 
 #Training Variables #################################################################################
 #(You don't have to touch these parameters if you don't wish to train the model on new data)
-VERSION = 4.2
+VERSION = 1.0
 VERBOSE = True
 
 #Where coco annotations (from roboflow) and images are located
@@ -45,7 +45,12 @@ N_CALLS = 100
 K = 30
 
 #For creating the mask data set used for classification
+<<<<<<< HEAD
 CREATE_MASK_DATASET = False
+=======
+CREATE_MASK_DATASET = True
+MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.2.pt"
+>>>>>>> a1fb347 (Change config)
 #I've found that lower tolerance is generally better (by reducing noise in the training data)
 #The tradeoff is that with lower tolerance, some of the big proposed masks will be thrown out of the training set
 TOLERANCE = 0.2
@@ -82,6 +87,10 @@ UPSAMPLE = 1000
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
 EVAL = True
+<<<<<<< HEAD
+=======
+VAL_SIZE = 0.2 #Proportion of images we want in the held-out set
+>>>>>>> a1fb347 (Change config)
 #Optionally, save the side-by-side comparisons
 SAVE_IMG = True
 FIG_SIZE = (16, 9)
