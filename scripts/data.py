@@ -13,9 +13,11 @@ import torchvision.transforms.v2 as tv2
 import torchvision.transforms.functional as TF
 from PIL import Image
 import matplotlib.pyplot as plt
+import json
+from collections import Counter
 
 from transforms import MASK_TRANSFORM, MASK_TRANSFORM_AUGMENT, inv_norm
-from config import MASK_SIZE, UPSAMPLE
+from config import MASK_SIZE, UPSAMPLE, CLASSES_FILE
 
 class MaskLoader(Dataset):
 
@@ -70,22 +72,36 @@ class MaskLoader(Dataset):
         print(f"Loading dataset from {file_path}")
         data = torch.load(file_path, weights_only=False)
 
-        self.labels = data["labels"]
-        self.classes = data["classes"]
+        labels = data["labels"]              # one-hot: shape [N, K]
+        classes = data["classes"]            # dict: class → index
+        raw_data = data["img_data"]
+
+        label_indices = torch.argmax(labels, dim=1).tolist()
+        class_counts = Counter(label_indices)
+
+        #Filter out classes with less than 20 observations
+        valid_class_indices = {cls for cls, count in class_counts.items() if count >= 20}
+        keep_mask = [i for i, idx in enumerate(label_indices) if idx in valid_class_indices]
+
+        self.labels = labels[keep_mask]
+        self.raw_data = [raw_data[i] for i in keep_mask]
+
+        old_to_new = {
+            old_idx: new_idx for new_idx, old_idx in enumerate(sorted(valid_class_indices))
+        }
+
+        new_label_indices = torch.tensor([old_to_new[idx] for idx in label_indices if idx in valid_class_indices])
+        inv_classes = {v: k for k, v in classes.items()}
+        self.classes = {
+            inv_classes[old]: new for old, new in old_to_new.items()
+        }
+
+        print(f"Remaining classes: {len(self.classes)}")
 
         self.class_distribution = self.get_class_distribution(self.labels)
 
-        self.raw_data = data["img_data"]
         self.img_data = self.augment(data["img_data"], self.transform_fn)
-        
-        #This helps the coral filter models learn on 'new' data that's representative of the true distribution of masks
-        #This is necessary for ensemble learning
-
-        #Shuffle labels (is the model actually learning?)
-        # indices = np.arange(len(self.labels))
-        # np.random.shuffle(indices)
-
-        # self.labels = self.labels[indices]
+        self.labels = torch.nn.functional.one_hot(new_label_indices, num_classes=len(old_to_new))
 
     def _oversample(self, class_cap=1000):
         print(f"Applying oversampling to balance minority classes (cap = {class_cap})...")
@@ -126,29 +142,6 @@ class MaskLoader(Dataset):
         #resample data from augmentation distribution
         self.img_data = self.augment(self.raw_data, self.transform_fn)
 
-    # def _undersample(self, class_cap=1000):
-    #     print(f"Applying undersampling to limit overrepresented classes (cap = {class_cap})...")
-
-    #     labels_np = torch.argmax(self.labels, dim=1).numpy()
-    #     class_counts = np.bincount(labels_np)
-
-    #     keep_indices = []
-
-    #     index_to_class = {v: k for k, v in self.classes.items()}
-    #     for class_idx, count in enumerate(class_counts):
-    #         indices = np.where(labels_np == class_idx)[0]
-
-    #         if count <= class_cap:
-    #             keep_indices.extend(indices)
-    #         else:
-    #             sampled_idx = np.random.choice(indices, size=class_cap, replace=False)
-    #             keep_indices.extend(sampled_idx)
-    #             print(f"Undersampling class {index_to_class.get(class_idx, class_idx)} from {count} → {class_cap}")
-
-    #     keep_indices = np.sort(keep_indices)
-    #     self.img_data = self.img_data[keep_indices]
-    #     self.labels = self.labels[keep_indices]
-
     @staticmethod
     def augment(images: torch.tensor, transform_fn):
         #This allows us to apply post-processing augmentations in a flexible way (so we don't have to apply augmentations in the _create_dataset method)
@@ -161,7 +154,10 @@ class MaskLoader(Dataset):
             "labels": self.labels,
             "img_data": self.img_data, 
         }, save_path)
-
+        #Save classes to json CLASSES_FILE
+        with open(CLASSES_FILE, 'w') as f:
+            json.dump(self.classes, f, indent=4)
+            
     def _create_dataset(self, images: List[str], tolerance=0.1, min_area=400):
 
         """

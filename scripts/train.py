@@ -11,12 +11,6 @@ Steps:
 Run as a standalone script or import train
 """
 
-#TODO:
-# - Retrain ensemble learner on different loss function than submodels
-# - Adjust show_masks/show_masks_side_by_side to show same color for same genus
-# - Recode evaluate method to capture desired metrics
-# - Create plots/slides for Thursday lab meeting
-
 from config import (
     VERSION, TRAIN_DIR, EXT,
     SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, 
@@ -25,7 +19,7 @@ from config import (
 
     TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR, PATIENCE,
 
-    EVAL, SAVE_IMG, FIG_SIZE, METADATA
+    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE
 )
 
 import os
@@ -41,6 +35,7 @@ import random
 import numpy as np
 
 from skopt.space import Real, Integer, Categorical  
+from sklearn.model_selection import train_test_split
 
 def load_data(file_path):
     ext = os.path.splitext(file_path)[1].lower()
@@ -60,6 +55,23 @@ def load_data(file_path):
     else:
         raise ValueError(f"Unsupported file extension: {ext}")
 
+def hold_out(images, val_size=VAL_SIZE, seed=42):
+    """
+    Splits a list of images into training and validation sets.
+
+    Args:
+        images (list): List of image paths.
+        val_size (float): Proportion of images to reserve for validation.
+        seed (int): Random seed for reproducibility.
+
+    Returns:
+        train_images (list), val_images (list)
+    """
+    train_images, val_images = train_test_split(
+        images, test_size=val_size, random_state=seed, shuffle=True
+    )
+    return train_images, val_images
+
 def train(tune_segmenter: bool = TUNE_SEGMENTER, 
           create_mask_dataset: bool = CREATE_MASK_DATASET,
           train_coral_filter: bool = TRAIN_CORAL_FILTER,
@@ -67,7 +79,11 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
           ):
 
     images = [os.path.join(TRAIN_DIR, file) for file in os.listdir(TRAIN_DIR) if file.endswith(EXT)]
-    random.shuffle(images)
+    
+    if VAL_SIZE > 0:
+        train_images, test_images = hold_out(images)
+    else:
+        train_images = test_images = images
 
     device = torch.device("cuda")
 
@@ -124,7 +140,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             Real(0, 1.0, name='gamma')
         ]
 
-        best_params = segmenter.tune(images, search_space, n_calls=N_CALLS, k_samples=K, verbose=VERBOSE)
+        best_params = segmenter.tune(train_images, search_space, n_calls=N_CALLS, k_samples=K, verbose=VERBOSE)
 
     ###########################################################################################################################################################
 
@@ -142,7 +158,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             device = device
         )
 
-        maskloader = MaskLoader(images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE)
+        maskloader = MaskLoader(train_images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE)
         maskloader.save_data(MASK_DATA_PATH)
             
     # Train the model to filter out non-coral masks
@@ -169,29 +185,28 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         save_dir = Path(f"figures/segmentation.v.{VERSION}")
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        pixel_accuracies = np.zeros(len(images))
-        #class_accuracies = np.zeros(len(images)) (TBD)
+        pixel_accuracies = np.zeros(len(test_images))
 
-        coral_cover_true = np.zeros(len(images))
-        coral_cover_pred = np.zeros(len(images))
+        coral_cover_true = np.zeros(len(test_images))
+        coral_cover_pred = np.zeros(len(test_images))
 
-        pct_bleached_true = np.zeros(len(images))
-        pct_bleached_pred = np.zeros(len(images))
+        pct_bleached_true = np.zeros(len(test_images))
+        pct_bleached_pred = np.zeros(len(test_images))
 
         genus_names = sorted(set(
             k.split(":")[0] for k in coral_segmenter.coral_filter.classes
             if ":bleached" in k or ":healthy" in k
         ))
 
-        coral_cover_class_healthy_true = np.zeros((len(images), len(genus_names)))
-        coral_cover_class_healthy_pred = np.zeros((len(images), len(genus_names)))
-        coral_cover_class_true = np.zeros((len(images), len(genus_names)))
-        coral_cover_class_pred = np.zeros((len(images), len(genus_names)))
+        coral_cover_class_healthy_true = np.zeros((len(test_images), len(genus_names)))
+        coral_cover_class_healthy_pred = np.zeros((len(test_images), len(genus_names)))
+        coral_cover_class_true = np.zeros((len(test_images), len(genus_names)))
+        coral_cover_class_pred = np.zeros((len(test_images), len(genus_names)))
 
         print(f"{'Idx':>4} | {'Acc':>6} | {'Avg Acc':>8} | {'True CC':>8} | {'Avg True CC':>12} | {'Pred CC':>8} | {'Avg Pred CC':>12}")
         print("-" * 78)
 
-        for i, image in enumerate(images):
+        for i, image in enumerate(test_images):
             masks, labels = coral_segmenter.predict(img_path = image, init_models=(i == 0), verbose=VERBOSE)
             pred_labels = coral_segmenter.coral_filter.get_class_names(labels, coral_segmenter.coral_filter.classes)
             genus_labels, bleach_labels, gt_masks = coral_segmenter.get_gt_masks(image)
@@ -259,7 +274,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         print("-" * 78)
         
         predictions = {
-            'image': images,
+            'image': test_images,
             'accuracy': pixel_accuracies,
             'coral_cover': coral_cover_true,
             'coral_cover_pred': coral_cover_pred,
@@ -278,7 +293,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             predictions[f'cover_healthy_pred__{genus}'] = coral_cover_class_healthy_pred[:, g]
 
         get_image_id = lambda path: path.split("\\")[-1].split("_")[0]
-        predictions['image_id'] = [get_image_id(img) for img in images]
+        predictions['image_id'] = [get_image_id(img) for img in test_images]
         predictions_df = pd.DataFrame(predictions)
         metadata = load_data(METADATA)
         metadata['image_id'] = metadata['filename'].str.split('.').str[0]
