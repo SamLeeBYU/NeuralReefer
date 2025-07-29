@@ -29,7 +29,7 @@ def plot_segmentation_summary(save=True, version=None, fig_size=None):
     predictions_data = pd.read_csv(f"data/performance/coral_segmenter_predictions.v.{version}.csv")
 
     # Plot: Accuracy vs Depth
-    plt.figure(fig_size)
+    plt.figure(figsize=fig_size)
     sns.scatterplot(data=predictions_data, x='Depth_WaterSurface', y='accuracy')
     plt.xlabel("Depth (m)")
     plt.ylabel("Accuracy")
@@ -41,7 +41,7 @@ def plot_segmentation_summary(save=True, version=None, fig_size=None):
     plt.show()
 
     # Plot: Histogram of Accuracies with Median Line
-    plt.figure(fig_size)
+    plt.figure(figsize=fig_size)
     sns.histplot(predictions_data['accuracy'], bins=30, kde=False, color='skyblue')
     plt.axvline(predictions_data['accuracy'].median(), color='black', linestyle='--', label='Median')
     plt.xlabel("Accuracy")
@@ -55,7 +55,7 @@ def plot_segmentation_summary(save=True, version=None, fig_size=None):
     plt.show()
 
     # Plot: Density plots of True vs Predicted Coral Cover
-    plt.figure(fig_size)
+    plt.figure(figsize=fig_size)
     sns.kdeplot(predictions_data['coral_cover'], label='True Coral Cover', fill=True, clip=(0, 1))
     sns.kdeplot(predictions_data['coral_cover_pred'], label='Predicted Coral Cover', fill=True, clip=(0, 1))
     plt.xlabel("Coral Cover")
@@ -91,7 +91,7 @@ def plot_segmentation_summary(save=True, version=None, fig_size=None):
 
     # Plot: Histogram of Coral Cover Bias (Predicted - True)
     bias = predictions_data['coral_cover_pred'] - predictions_data['coral_cover']
-    plt.figure(fig_size)
+    plt.figure(figsize=fig_size)
     sns.histplot(bias, bins=30, kde=False, color='salmon')
     plt.axvline(bias.median(), color='black', linestyle='--', label='Median Bias')
     plt.xlabel("Bias (Predicted - True)")
@@ -148,5 +148,5 @@ def plot_coral_cover(eval_file=None, save=True, version=None, fig_size=None, col
     plt.show()
 
 if __name__ == "__main__":
-    plot_coral_cover(col="coral_cover_pred", title="Predicted Coral Cover")
     plot_segmentation_summary()
+    plot_coral_cover(col="coral_cover_pred", title="Predicted Coral Cover")

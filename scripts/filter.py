@@ -122,6 +122,7 @@ class CoralFilter:
         for epoch in range(self.epochs):
 
             print(f"Epoch {epoch+1}\n-------------------------------")
+            self.dataset.resample()
             epoch_loss = 0.0
 
             correct = 0
@@ -307,7 +308,6 @@ class CoralFilterEnsembler:
     def train(self, ensemble_split=0.1):
         for i in range(self.m):
             print(f"Creating model {i+1}/{self.m}")
-            self.mask_data.resample()
             model_i = CoralFilter(self.base_model(pretrained=True, dim=self.k, res=RES), self.mask_data, self.device, 
                                   create_loss_fn(use_focal=False), #Generic CCE loss for each submodule
                                   batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=True, seed=self.seed, bootstrap=True)

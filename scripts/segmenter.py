@@ -23,6 +23,8 @@ import sys
 from collections import defaultdict
 import random
 import time
+from collections import defaultdict
+import pandas as pd
 
 import torch
 from torchvision.io import decode_image
@@ -740,12 +742,90 @@ class CoralSegmenter(SAM2Segmenter):
     @staticmethod
     def _create_color_map(classes):
         unique_labels = sorted(set(classes.keys()))
-        label_to_color = {
-            label: np.random.rand(3).tolist() + [0.6]
-            for label in unique_labels
+        genus_set = sorted({label.split(":")[0] for label in unique_labels if ":" in label})
+        genus_to_color = {
+            genus: np.random.rand(3)
+            for genus in genus_set
         }
+
+        label_to_color = {}
+        for label in unique_labels:
+            if ":" in label:
+                genus, status = label.split(":")
+                base_color = genus_to_color[genus]
+
+                if status == "bleached":
+                    # Mix with white to make it lighter (e.g., 70% white, 30% color)
+                    light_color = 0.7 * np.ones(3) + 0.3 * base_color
+                    label_to_color[label] = light_color.tolist() + [0.8]
+                else:
+                    label_to_color[label] = base_color.tolist() + [0.8]
+            else:
+                # Neutral gray for noncoral or unlabeled classes
+                label_to_color[label] = [0.5, 0.5, 0.5, 0.8]
+
         return label_to_color
 
     @staticmethod
     def coral_cover(masks, area=1024*1024, cs=0):
         return (np.sum(masks, axis=0).astype(bool)).sum() / (area - cs)
+    
+    def summary_stats(self, images):
+        genus_bleach_counts = defaultdict(int)
+        genus_bleach_area = defaultdict(float)
+        annotations_per_image = []
+        coral_cover_per_image = []
+
+        for img_path in tqdm(images, desc="Computing Summary Stats"):
+            genus_labels, bleach_labels, gt_masks = self.get_gt_masks(img_path)
+            
+            if genus_labels is not None:
+                n = len(genus_labels)
+            else:
+                n = 0
+            annotations_per_image.append(n)
+
+            # Total coral cover (de-overlapped)
+            total_coral_area = self.coral_cover(gt_masks, cs=CROP_SPACE)
+            coral_cover_per_image.append(total_coral_area)
+
+            # Group masks by (genus, bleach)
+            class_to_masks = defaultdict(list)
+            for i in range(n):
+                genus = genus_labels[i]
+                bleach = 'bleached' if bleach_labels[i] == 1 else 'healthy'
+                key = (genus, bleach)
+                class_to_masks[key].append(gt_masks[i])
+                genus_bleach_counts[key] += 1
+
+            # Compute class-specific coral cover (de-overlapped within class)
+            for key, masks in class_to_masks.items():
+                stacked_masks = np.stack(masks, axis=0)
+                class_area = self.coral_cover(stacked_masks, cs=CROP_SPACE)
+                rel_area = class_area / total_coral_area if total_coral_area > 0 else 0
+                genus_bleach_area[key] += rel_area
+                
+        # Panel 1: Mask Counts
+        count_df = pd.DataFrame([
+            {'Genus': g, 'Bleaching': b, 'Mask Count': c}
+            for (g, b), c in genus_bleach_counts.items()
+        ]).sort_values(['Genus', 'Bleaching'])
+
+        annot_stats = pd.Series(annotations_per_image).describe()
+
+        # Panel 2: Coral Area
+        area_df = pd.DataFrame([
+            {'Genus': g, 'Bleaching': b, 'Coral Area (px)': a}
+            for (g, b), a in genus_bleach_area.items()
+        ]).sort_values(['Genus', 'Bleaching'])
+
+        cover_stats = pd.Series(coral_cover_per_image).describe()
+
+        print("Mask Count by Genus and Bleaching")
+        print(count_df.to_string(index=False))
+        print("\nAnnotation Count per Image (Summary Stats)")
+        print(annot_stats)
+        print("\nCoral Area by Genus and Bleaching")
+        print(area_df.to_string(index=False))
+        print("\nTotal Coral Cover per Image (Summary Stats)")
+        print(cover_stats)

@@ -7,7 +7,7 @@ for easy access and modification.
 """
 
 #Trained models / tuned hyperparameters
-FILTER_MODELS_DIR = "models/filter_res18_17"
+FILTER_MODELS_DIR = "models/filter_res34_7"
 HYPERPARAM_FILE = f"data/segmentation/SAM2hyperparameters.json"
 MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.2.pt"
 
@@ -26,7 +26,7 @@ CROP_SPACE = 7130
 
 #Training Variables #################################################################################
 #(You don't have to touch these parameters if you don't wish to train the model on new data)
-VERSION = 4.0
+VERSION = 4.2
 VERBOSE = True
 
 #Where coco annotations (from roboflow) and images are located
@@ -57,7 +57,7 @@ MIN_AREA = 1000
 #For training the coral classifier
 TRAIN_CORAL_FILTER = True
 #Number of models in the ensemble
-M = 17
+M = 7
 #Max number of iterations through the entire data set
 EPOCHS = 30
 #How many data points are passed forward through the model before the gradient is updated
@@ -75,15 +75,27 @@ CLASSES_FILE = "data/classes.json"
 #Weight for increasing recall
 NEG_WEIGHT = 0.25
 #Which ResNet backbone the classifiers will use
-RES = 18
+RES = 34
 #What is the minimum number of observations you want in each class? (synthetically oversample)
-UPSAMPLE = 4000
+UPSAMPLE = 1000
 
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
 EVAL = True
 #Optionally, save the side-by-side comparisons
-SAVE_IMG = False
+SAVE_IMG = True
 FIG_SIZE = (16, 9)
 #Data from yellowfin to be merged with prediction metric data
 METADATA = "data/metadata/Day3_Photo_MetaData_sr4.xlsx"
+
+#ResNet34, 3 models, upsampling=1000 + bootstrapping
+#Ensemble model trained with out-of-sample accuracy: 0.7616, Recall: 0.8697, Precision: 0.8214
+
+#ResNet34, 3 models, upsampling=1000 w/o bootstrapping
+#Ensemble model trained with out-of-sample accuracy: 0.7883, Recall: 0.7899, Precision: 0.8910
+
+#ResNet34, 7 models, upsampling=1000 w/o bootstrapping
+#Ensemble model trained with out-of-sample accuracy: 0.7841, Recall: 0.8655, Precision: 0.8207
+
+#ResNet34, 3 models, upsampling=1000 + bootstrapping
+#Ensemble model trained with out-of-sample accuracy: 0.8790, Recall: 0.9307, Precision: 0.9210

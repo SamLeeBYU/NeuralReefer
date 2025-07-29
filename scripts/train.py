@@ -165,7 +165,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         coral_filter.load_models(FILTER_MODELS_DIR)
 
         coral_segmenter = CoralSegmenter(config_path, checkpoint_path, coral_filter, annotation_path = f"{TRAIN_DIR}/_annotations.coco.json", device=device)
-
+        #coral_segmenter.summary_stats(images)
         save_dir = Path(f"figures/segmentation.v.{VERSION}")
         save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -196,7 +196,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             pred_labels = coral_segmenter.coral_filter.get_class_names(labels, coral_segmenter.coral_filter.classes)
             genus_labels, bleach_labels, gt_masks = coral_segmenter.get_gt_masks(image)
             if genus_labels is not None:
-                ml_labels = genus_labels + np.where(bleach_labels == 1, ":healthy", ":bleached")
+                ml_labels = genus_labels + np.where(bleach_labels == 1, ":bleached", ":healthy")
             else:
                 ml_labels = np.array([])
             
@@ -284,7 +284,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         metadata['image_id'] = metadata['filename'].str.split('.').str[0]
         
         predictions_data = pd.merge(predictions_df, metadata, on='image_id', how='left')
-        pd.DataFrame(predictions_data).to_csv(f"data/coral_segmenter_predictions.v.{VERSION}.csv", index=False)
+        pd.DataFrame(predictions_data).to_csv(f"data/performance/coral_segmenter_predictions.v.{VERSION}.csv", index=False)
 
 if __name__ == "__main__":
     train(eval=True)
