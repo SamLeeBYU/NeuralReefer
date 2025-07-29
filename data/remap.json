@@ -19,7 +19,8 @@
   "acropora_finger": "finger_acropora",
   "acropora_0": "finger_acropora",
   "acropora_shaggy": "finger_acropora",
-  "acropora_table": "finger_acropora",
+
+  "acropora_table": "table_acropora",
 
   "pocillopora_damicornis": "pocillopora_",
   "pocillopora_meandrina": "pocillopora_",
@@ -37,12 +38,14 @@
   "porites_australiensis": "mounding_",
   "fungia": "mounding_",
 
-  "porites_rus": "finger-knob_porites",
-  "porites_monticulosa": "finger-knob_porites",
-  "porites_deformis": "finger-knob_porites",
-  "porites_0": "finger-knob_porites",
-  "porites": "finger-knob_porites",
-  "porites_finger": "finger-knob_porites",
-  "porites_cylindrica": "finger-knob_porites",
-  "portes_cylindrica": "finger-knob_porites"
+  "porites_rus": "knob_porites",
+  "porites_monticulosa": "knob_porites",
+
+  "porites_deformis": "finger_porites",
+  "porites_deformis_2": "finger_porites",
+  "porites_0": "finger_porites",
+  "porites": "finger_porites",
+  "porites_finger": "finger_porites",
+  "porites_cylindrica": "finger_porites",
+  "portes_cylindrica": "finger_porites"
 }
