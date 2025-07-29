@@ -59,16 +59,15 @@ from visualize import plot_segmentation_summary, plot_coral_cover
 from filter import CoralFilterEnsembler
 from segmenter import CoralSegmenter
 
-
 def eval(image_dir: str) -> pd.DataFrame:
     """
     Evaluates coral cover for a directory of images using a trained CoralSegmenter.
 
     Args:
-        image_dir (str): Directory containing images to process (all images with the extension EXT will be included)
+        image_dir (str): Directory containing images to process.
 
     Returns:
-        pd.DataFrame: DataFrame with columns: image, image_id, coral_cover
+        pd.DataFrame: DataFrame with image metadata and coral cover breakdown.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -83,26 +82,58 @@ def eval(image_dir: str) -> pd.DataFrame:
     )
 
     image_paths = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if f.endswith(EXT)]
+    genus_names = sorted(set(
+        k.split(":")[0] for k in segmenter.coral_filter.classes
+        if ":bleached" in k or ":healthy" in k
+    ))
 
-    results = []
     save_dir = Path(f"{image_dir}/eval")
     save_dir.mkdir(parents=True, exist_ok=True)
-    for i in tqdm(range(len(image_paths))):
-        img_path = image_paths[i]
-        
-        if not VERBOSE: suppress_prints()
-        masks = segmenter.predict(img_path=img_path, init_models=(i==0), verbose=VERBOSE)
-        if not VERBOSE: restore_prints()
 
-        cover = segmenter.coral_cover(masks, cs=segmenter.crop_space)
-        if VERBOSE:
-            print(f"Predicted coral cover: {cover*100:.4f}%")
+    results = []
+    for i, img_path in enumerate(tqdm(image_paths)):
         image_id = Path(img_path).stem.split('_')[0]
 
-        if SAVE_MASKS:
-            segmenter.show_masks(masks, show=False, save_path=save_dir / f"{image_id}.png")
+        if not VERBOSE: suppress_prints()
+        masks, labels = segmenter.predict(img_path=img_path, init_models=(i==0), verbose=VERBOSE)
+        if not VERBOSE: restore_prints()
 
-        results.append({"image": img_path, "image_id": image_id, "coral_cover_pred": cover})
+        pred_labels = segmenter.coral_filter.get_class_names(labels, segmenter.coral_filter.classes)
+
+        cover = segmenter.coral_cover(masks, cs=segmenter.crop_space)
+        pct_bleached = segmenter.coral_cover(
+            [masks[j] for j in range(len(pred_labels)) if pred_labels[j].endswith(":bleached")],
+            cs=segmenter.crop_space
+        )
+
+        genus_cover = {}
+        genus_cover_healthy = {}
+        for genus in genus_names:
+            genus_cover[genus] = segmenter.coral_cover(
+                [masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(f"{genus}:")],
+                cs=segmenter.crop_space
+            )
+            genus_cover_healthy[genus] = segmenter.coral_cover(
+                [masks[j] for j in range(len(pred_labels)) if pred_labels[j] == f"{genus}:healthy"],
+                cs=segmenter.crop_space
+            )
+
+        record = {
+            "image": img_path,
+            "image_id": image_id,
+            "coral_cover_pred": cover,
+            "pct_bleached_pred": pct_bleached,
+        }
+
+        for g in genus_names:
+            record[f"cover_pred__{g}"] = genus_cover[g]
+            record[f"cover_healthy_pred__{g}"] = genus_cover_healthy[g]
+
+        if SAVE_MASKS:
+            segmenter.show_masks(masks, segmenter.color_map, pred_labels, show=False,
+                                 save_path=save_dir / f"{image_id}.png")
+
+        results.append(record)
 
     return pd.DataFrame(results)
 

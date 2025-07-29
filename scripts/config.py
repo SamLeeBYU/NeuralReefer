@@ -8,11 +8,11 @@ for easy access and modification.
 
 #Trained models / tuned hyperparameters
 FILTER_MODELS_DIR = "models/filter_res34_7"
-HYPERPARAM_FILE = f"data/segmentation/SAM2hyperparameters.json"
+HYPERPARAM_FILE = "data/segmentation/SAM2hyperparameters.json"
 MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.2.pt"
 
 #Needed to reference the SAM2 backbone
-SAM2_PATH = "C:\\Users\\lab\\Box\\Research\\WHOI\\sam2"
+SAM2_PATH = "C:\\Users\\lab\\Desktop\\segmentation\\sam2"
 SAM2_CONFIG_PATH = "configs/sam2.1/sam2.1_hiera_l.yaml"
 SAM2_CHECKPOINT_PATH = f"{SAM2_PATH}/checkpoints/sam2.1_hiera_large.pt"
 
@@ -20,13 +20,13 @@ SAM2_CHECKPOINT_PATH = f"{SAM2_PATH}/checkpoints/sam2.1_hiera_large.pt"
 REMAP_PATH = "data/remap.json"
 
 #Do you want to save the predicted annotations as an image?
-SAVE_MASKS = True
+SAVE_MASKS = False
 #How many pixels in the image file are not part of the actual image
 CROP_SPACE = 7130
 
 #Training Variables #################################################################################
 #(You don't have to touch these parameters if you don't wish to train the model on new data)
-VERSION = 4.2
+VERSION = 1.0
 VERBOSE = True
 
 #Where coco annotations (from roboflow) and images are located
@@ -45,7 +45,7 @@ N_CALLS = 100
 K = 30
 
 #For creating the mask data set used for classification
-CREATE_MASK_DATASET = False
+CREATE_MASK_DATASET = True
 #I've found that lower tolerance is generally better (by reducing noise in the training data)
 #The tradeoff is that with lower tolerance, some of the big proposed masks will be thrown out of the training set
 TOLERANCE = 0.2
@@ -81,7 +81,7 @@ UPSAMPLE = 1000
 
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
-EVAL = True
+EVAL = False
 #Optionally, save the side-by-side comparisons
 SAVE_IMG = True
 FIG_SIZE = (16, 9)

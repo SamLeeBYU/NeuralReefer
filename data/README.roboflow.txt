@@ -1,8 +1,8 @@
 
-yellowfin_segment - v14 2025-07-10 3:56pm
+yellowfin_segment - v17 2025-07-29 2:07pm
 ==============================
 
-This dataset was exported via roboflow.com on July 10, 2025 at 7:57 PM GMT
+This dataset was exported via roboflow.com on July 29, 2025 at 6:12 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -17,7 +17,7 @@ visit https://github.com/roboflow/notebooks
 
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
-The dataset includes 365 images.
+The dataset includes 558 images.
 Coral are annotated in COCO Segmentation format.
 
 The following pre-processing was applied to each image:

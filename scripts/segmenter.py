@@ -446,7 +446,7 @@ class SAM2Segmenter:
                 return masks #np.stack([mask['segmentation'] for mask in sorted_masks])
             else:
                 #Filter out overlapping masks
-                return self.merge(masks, min_area, overlap, verbose)[0]
+                return self.merge(masks, min_area=min_area, overlap=overlap, verbose=verbose)[0]
 
     def merge(self, masks, weights=None, min_area=None, overlap=0.1, verbose=True):
         min_area = min_area or MIN_AREA
