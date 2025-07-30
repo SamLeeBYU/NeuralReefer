@@ -175,7 +175,7 @@ class SAM2Segmenter:
         annotation_loc = np.argwhere(np.array(self.annotations['image_id']) == img_id)
         if len(annotation_loc) < 1:
             print(f"No annotations found for image ID {img_id}.")
-            return None, np.array([])
+            return None, None, np.array([])
         annotation_loc = annotation_loc[0][0]
         masks = [
             np.array(polygon, dtype=np.int32).reshape(-1, 2) for polygon in self.annotations['annotations'][annotation_loc]['segmentations']

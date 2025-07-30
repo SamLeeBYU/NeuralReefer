@@ -85,8 +85,8 @@ class CoralFilter:
                 #of the *same* training data to appropriately explore the sampling distribution 
                 random_state=seed
             )
-            #array([36522, 22444, 12104, ...,  5268,   469, 34609], shape=(33165,))
-            #array([44820, 46372, 32148, ..., 19602,  2894, 30908], shape=(14214,))
+            #array([45836, 65131, 20203, ..., 54551, 34767, 67438], shape=(51338,))
+            #array([50013, 25265, 32029, ..., 29129, 63953, 48043], shape=(22003,))
 
             if bootstrap:
                 train_idx = np.random.choice(train_idx, size=len(train_idx), replace=True)
@@ -265,7 +265,7 @@ class CoralFilterEnsembler:
         self.mask_data = None
         if self.base_dataset is not None: #e.g. if we're training the model
             self.mask_data = MaskLoader(load_file=self.base_dataset, balance=True)
-            self.mask_loader = DataLoader(self.mask_data, batch_size=batch_size)
+            #self.mask_loader = DataLoader(self.mask_data, batch_size=batch_size)
 
             self.classes = self.mask_data.classes
             with open(CLASSES_FILE, 'w') as f:
@@ -353,7 +353,6 @@ class CoralFilterEnsembler:
 
         N, M, K = self.X_train.shape
 
-
         #Alternatively, if you know the true distribution of coral classes across images you may substitute the class weights here
         weights = torch.ones(K)
         weights[self.noncoral_class] = NEG_WEIGHT
@@ -371,6 +370,21 @@ class CoralFilterEnsembler:
         # C_hat = cm / cm.sum(axis=0, keepdims=True)
         # mu_hat = np.bincount(y_hat_preds, minlength=K) / len(y_hat_preds)
         # w = np.linalg.pinv(C_hat) @ mu_hat
+
+        #Plot CM
+        # import matplotlib.pyplot as plt
+        # import seaborn as sns
+        # class_names = list(self.mask_data.classes.keys())
+
+        # cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+        # sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues', 
+        #             xticklabels=class_names, yticklabels=class_names)
+        # plt.xlabel('Predicted')
+        # plt.ylabel('True')
+        # plt.title('Normalized Confusion Matrix')
+        # plt.tight_layout()
+        # plt.show()
 
         # self.ensemble_model = EnsembleOptimizer(M, K).to(self.device)
         # self.loss_fn = create_loss_fn(use_focal=True, weight=torch.tensor(1/w/sum(1/w), dtype=torch.float32)).to(self.device)

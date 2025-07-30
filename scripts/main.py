@@ -42,6 +42,11 @@ Main use case: Use NeuralReefer to obtain summary data on new coral images
 
 """
 
+#07.30.2025
+# Run evaluation on batch images on desktop
+# Look at results from 100 validation images
+# Paper: methods, results, data
+
 import argparse
 import os
 from pathlib import Path

@@ -56,11 +56,11 @@ MASK_SIZE = (128, 128)
 MIN_AREA = 1000
 
 #For training the coral classifier
-TRAIN_CORAL_FILTER = True
+TRAIN_CORAL_FILTER = False
 #Number of models in the ensemble
 M = 7
 #Max number of iterations through the entire data set
-EPOCHS = 30
+EPOCHS = 100
 #How many data points are passed forward through the model before the gradient is updated
 BATCH_SIZE = 32
 #The 'size' of the step used for each gradient update
@@ -82,7 +82,7 @@ UPSAMPLE = 1000
 
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
-EVAL = True
+EVAL = False
 VAL_SIZE = 0.2 #Proportion of images we want in the held-out set
 #Optionally, save the side-by-side comparisons
 SAVE_IMG = True
@@ -101,3 +101,7 @@ METADATA = "data/metadata/Day3_Photo_MetaData_sr4.xlsx"
 
 #ResNet34, 3 models, upsampling=1000 + bootstrapping
 #Ensemble model trained with out-of-sample accuracy: 0.8790, Recall: 0.9307, Precision: 0.9210
+
+#ResNet34, 7 models, upsampling=1000 + bootstrapping (17 classes)
+#Ensemble model trained with out-of-sample accuracy: 0.8087, Recall: 0.8947, Precision: 0.8960
+#(on test data): Ensemble model trained with out-of-sample accuracy: 0.4096, Recall: 0.7320, Precision: 0.7768

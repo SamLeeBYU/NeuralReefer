@@ -17,7 +17,7 @@ import json
 from collections import Counter
 
 from transforms import MASK_TRANSFORM, MASK_TRANSFORM_AUGMENT, inv_norm
-from config import MASK_SIZE, UPSAMPLE, CLASSES_FILE
+from config import MASK_SIZE, UPSAMPLE, CLASSES_FILE, MASK_DATA_PATH
 
 class MaskLoader(Dataset):
 
@@ -76,32 +76,41 @@ class MaskLoader(Dataset):
         classes = data["classes"]            # dict: class → index
         raw_data = data["img_data"]
 
-        label_indices = torch.argmax(labels, dim=1).tolist()
-        class_counts = Counter(label_indices)
+        reindex = False
+        if reindex: #If you want to exclude classes with very few observations (this may be helpful if there are typos in the data labels)
+            label_indices = torch.argmax(labels, dim=1).tolist()
+            class_counts = Counter(label_indices)
 
-        #Filter out classes with less than 20 observations
-        valid_class_indices = {cls for cls, count in class_counts.items() if count >= 20}
-        keep_mask = [i for i, idx in enumerate(label_indices) if idx in valid_class_indices]
+            #Filter out classes with less than 20 observations
+            valid_class_indices = {cls for cls, count in class_counts.items() if count >= 20}
+            keep_mask = [i for i, idx in enumerate(label_indices) if idx in valid_class_indices]
 
-        self.labels = labels[keep_mask]
-        self.raw_data = [raw_data[i] for i in keep_mask]
+            self.labels = labels[keep_mask]
+            self.raw_data = [raw_data[i] for i in keep_mask]
 
-        old_to_new = {
-            old_idx: new_idx for new_idx, old_idx in enumerate(sorted(valid_class_indices))
-        }
+            old_to_new = {
+                old_idx: new_idx for new_idx, old_idx in enumerate(sorted(valid_class_indices))
+            }
 
-        new_label_indices = torch.tensor([old_to_new[idx] for idx in label_indices if idx in valid_class_indices])
-        inv_classes = {v: k for k, v in classes.items()}
-        self.classes = {
-            inv_classes[old]: new for old, new in old_to_new.items()
-        }
+            new_label_indices = torch.tensor([old_to_new[idx] for idx in label_indices if idx in valid_class_indices])
+            inv_classes = {v: k for k, v in classes.items()}
+            self.classes = {
+                inv_classes[old]: new for old, new in old_to_new.items()
+            }
 
-        print(f"Remaining classes: {len(self.classes)}")
+            print(f"Remaining classes: {len(self.classes)}")
+            self.labels = torch.nn.functional.one_hot(new_label_indices, num_classes=len(old_to_new))
+        else:
+            self.labels = labels
+            self.raw_data = raw_data
+            self.classes = classes
 
         self.class_distribution = self.get_class_distribution(self.labels)
-
+        #Counter({10: 49932, 3: 5142, 2: 2393, 9: 1818, 8: 1573, 7: 1483, 16: 682, 5: 659, 14: 527, 1: 383, 12: 318, 0: 285, 15: 219, 13: 114, 11: 82, 4: 44, 6: 27})
         self.img_data = self.augment(data["img_data"], self.transform_fn)
-        self.labels = torch.nn.functional.one_hot(new_label_indices, num_classes=len(old_to_new))
+        
+        if reindex:
+            self.save_data(MASK_DATA_PATH)
 
     def _oversample(self, class_cap=1000):
         print(f"Applying oversampling to balance minority classes (cap = {class_cap})...")

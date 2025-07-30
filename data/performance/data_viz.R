@@ -3,7 +3,7 @@ library(readxl)
 
 metadata = readxl::read_xlsx("data/metadata/Day3_Photo_MetaData_sr4.xlsx")
 
-eval.dat = read_csv("data/performance/coral_segmenter_predictions.v.4.1.csv")
+eval.dat = read_csv("data/performance/coral_segmenter_predictions.v.1.0.csv")
 
 # --- Custom GGplot Theme -------------------------------------------------
 
@@ -63,6 +63,7 @@ coral.cover.pred[is.infinite(coral.cover.pred)] <- 0
 
 bias.mat <- coral.cover.pred-coral.cover.true
 apply(bias.mat, 2, function(x)mean(x, na.rm=T))
+apply(bias.mat, 2, function(x)median(x, na.rm=T))
 
 #Biases by bleaching/genus
 bleached.cover.biases <- (1-coral.cover.pred[,9:ncol(coral.cover.pred)])-(1-coral.cover.true[,9:ncol(coral.cover.true)])

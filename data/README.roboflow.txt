@@ -1,8 +1,8 @@
 
-yellowfin_segment - v17 2025-07-29 2:07pm
+yellowfin_segment - v18 2025-07-30 8:12am
 ==============================
 
-This dataset was exported via roboflow.com on July 29, 2025 at 6:12 PM GMT
+This dataset was exported via roboflow.com on July 30, 2025 at 12:13 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
