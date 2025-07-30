@@ -238,3 +238,6 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+#R
+.Rhistory

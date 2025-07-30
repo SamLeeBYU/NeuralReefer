@@ -100,7 +100,3 @@ METADATA = "data/metadata/Day3_Photo_MetaData_sr4.xlsx"
 
 #ResNet34, 3 models, upsampling=1000 + bootstrapping
 #Ensemble model trained with out-of-sample accuracy: 0.8790, Recall: 0.9307, Precision: 0.9210
-
-#ResNet34, 7 models, upsampling=1000 + bootstrapping (17 classes)
-#Ensemble model trained with out-of-sample accuracy: 0.8087, Recall: 0.8947, Precision: 0.8960
-#(on test data): Ensemble model trained with out-of-sample accuracy: 0.4096, Recall: 0.7320, Precision: 0.7768
