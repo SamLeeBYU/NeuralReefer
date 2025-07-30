@@ -58,12 +58,13 @@ from visualize import plot_segmentation_summary, plot_coral_cover
 from filter import CoralFilterEnsembler
 from segmenter import CoralSegmenter
 
-def inference(image_dir: str) -> pd.DataFrame:
+def inference(image_dir: str, output_file: str) -> pd.DataFrame:
     """
     Evaluates coral cover for a directory of images using a trained CoralSegmenter.
 
     Args:
         image_dir (str): Directory containing images to process.
+        output_file (str): File to write results.
 
     Returns:
         pd.DataFrame: DataFrame with image metadata and coral cover breakdown.
@@ -133,7 +134,8 @@ def inference(image_dir: str) -> pd.DataFrame:
                                  save_path=save_dir / f"{image_id}.png")
 
         results.append(record)
-
+        if i % 100 == 0:
+            results.to_csv(output_file, index=False)
     return pd.DataFrame(results)
 
 if __name__ == "__main__":
@@ -154,8 +156,8 @@ if __name__ == "__main__":
 
     elif args.mode == "inference":
         assert args.image_dir, "Must provide --image_dir"
-        predictions_data = inference(args.image_dir)
         output_file = f"{args.image_dir}/inference/inference.csv"
+        predictions_data = inference(args.image_dir, output_file)
 
         if METADATA is not None:
             metadata = load_data(METADATA)
