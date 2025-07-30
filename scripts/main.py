@@ -38,14 +38,9 @@ Train the entire the entire pipeline with your own data
 
 Main use case: Use NeuralReefer to obtain summary data on new coral images
 
-> python scripts/main.py --mode eval --image_dir data/test/tabletops
+> python scripts/main.py --mode inference --image_dir data/test/tabletops
 
 """
-
-#07.30.2025
-# Run evaluation on batch images on desktop
-# Look at results from 100 validation images
-# Paper: methods, results, data
 
 import argparse
 import os
@@ -63,7 +58,7 @@ from visualize import plot_segmentation_summary, plot_coral_cover
 from filter import CoralFilterEnsembler
 from segmenter import CoralSegmenter
 
-def eval(image_dir: str) -> pd.DataFrame:
+def inference(image_dir: str) -> pd.DataFrame:
     """
     Evaluates coral cover for a directory of images using a trained CoralSegmenter.
 
@@ -91,7 +86,7 @@ def eval(image_dir: str) -> pd.DataFrame:
         if ":bleached" in k or ":healthy" in k
     ))
 
-    save_dir = Path(f"{image_dir}/eval")
+    save_dir = Path(f"{image_dir}/inference")
     save_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
@@ -143,10 +138,10 @@ def eval(image_dir: str) -> pd.DataFrame:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NeuralReefer")
-    parser.add_argument("--mode", type=str, default="eval", choices=["train", "visualize-coral-cover", "eval"], help="Execution mode")
+    parser.add_argument("--mode", type=str, default="inference", choices=["train", "visualize-coral-cover", "inference"], help="Execution mode")
     #parser.add_argument("--version", type=str, required=False, help="Version identifier for visualizations")
     parser.add_argument("--image_dir", type=str, required=False, help="Directory of images to evaluate")
-    parser.add_argument("--predictions_file", type=str, required=False, help="File path of evaluations (generated from mode=eval)")
+    parser.add_argument("--predictions_file", type=str, required=False, help="File path of evaluations (generated from mode=inference)")
 
     args = parser.parse_args()
 
@@ -157,10 +152,10 @@ if __name__ == "__main__":
         assert args.prediction_file
         plot_coral_cover(args.prediction_file)
 
-    elif args.mode == "eval":
+    elif args.mode == "inference":
         assert args.image_dir, "Must provide --image_dir"
-        predictions_data = eval(args.image_dir)
-        output_file = f"{args.image_dir}/eval/eval.csv"
+        predictions_data = inference(args.image_dir)
+        output_file = f"{args.image_dir}/inference/inference.csv"
 
         if METADATA is not None:
             metadata = load_data(METADATA)

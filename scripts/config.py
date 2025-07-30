@@ -82,10 +82,10 @@ UPSAMPLE = 1000
 
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
-EVAL = False
+EVAL = True
 VAL_SIZE = 0 #Proportion of images we want in the held-out set
 #Optionally, save the side-by-side comparisons
-SAVE_IMG = True
+SAVE_IMG = False
 FIG_SIZE = (16, 9)
 #Data from yellowfin to be merged with prediction metric data
 METADATA = "data/metadata/Day3_Photo_MetaData_sr4.xlsx"
