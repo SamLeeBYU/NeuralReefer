@@ -163,5 +163,5 @@ if __name__ == "__main__":
             
             predictions_data = pd.merge(predictions_data, metadata, on='image_id', how='left')
 
-        predictions_data.to_csv(predictions_data, index=False)
+        predictions_data.to_csv(output_file, index=False)
         print(f"Saved coral cover estimates to {output_file}")
