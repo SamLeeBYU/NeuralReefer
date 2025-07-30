@@ -10,7 +10,7 @@
         "large_box_nms_thresh": 0.4802582764361018,
         "large_crop_n_points_downscale_factor": 1,
         "large_min_mask_region_area": 10000,
-        "small_points_per_side": 21,
+        "small_points_per_side": 24,
         "small_points_per_batch": 64,
         "small_pred_iou_thresh": 0.3274827056172288,
         "small_stability_score_thresh": 0.42709389872052467,

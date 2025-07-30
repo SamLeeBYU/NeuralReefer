@@ -7,7 +7,7 @@ for easy access and modification.
 """
 
 #Trained models / tuned hyperparameters
-FILTER_MODELS_DIR = "models/filter_res34_7"
+FILTER_MODELS_DIR = "models/filter_res34_5"
 HYPERPARAM_FILE = "data/segmentation/SAM2hyperparameters.json"
 MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.2.pt"
 
@@ -30,7 +30,7 @@ VERSION = 1.0
 VERBOSE = True
 
 #Where coco annotations (from roboflow) and images are located
-TRAIN_DIR = "data/train"
+TRAIN_DIR = "data/versions/test"
 #The code will find all images in the TRAIN_DIR with this extension
 EXT = ".jpg"
 #NOTE: COCO JSON file must be named "_annotations.coco.json" within this directory
@@ -45,7 +45,7 @@ N_CALLS = 100
 K = 30
 
 #For creating the mask data set used for classification
-CREATE_MASK_DATASET = True
+CREATE_MASK_DATASET = False
 MASK_DATA_PATH = "data/segmentation/maskloader_128_tolerance=0.2.pt"
 #I've found that lower tolerance is generally better (by reducing noise in the training data)
 #The tradeoff is that with lower tolerance, some of the big proposed masks will be thrown out of the training set
@@ -58,7 +58,7 @@ MIN_AREA = 1000
 #For training the coral classifier
 TRAIN_CORAL_FILTER = False
 #Number of models in the ensemble
-M = 7
+M = 5
 #Max number of iterations through the entire data set
 EPOCHS = 100
 #How many data points are passed forward through the model before the gradient is updated
@@ -83,7 +83,7 @@ UPSAMPLE = 1000
 #Run the trained model on the images in TRAIN_DIR
 #and obtain evaluation metrics for data
 EVAL = False
-VAL_SIZE = 0.2 #Proportion of images we want in the held-out set
+VAL_SIZE = 0 #Proportion of images we want in the held-out set
 #Optionally, save the side-by-side comparisons
 SAVE_IMG = True
 FIG_SIZE = (16, 9)

@@ -99,7 +99,7 @@ library(showtext)
 library(patchwork)
 
 # Create the output directory if it doesn't exist
-save_dir <- "figures/segmentation.v.4.1"
+save_dir <- "figures/segmentation.v.1.0"
 dir.create(save_dir, showWarnings = FALSE, recursive = TRUE)
 
 # Custom plot size (in inches), dpi 100 → 1200x800 px

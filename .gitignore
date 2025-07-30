@@ -4,12 +4,14 @@
 data/segmentation/*.pt
 data/test/
 data/train/*.jpg
+data/versions/
 !data/README.md
 
 scripts/coralnet.py
 
 # Model checkpoints
 models/filter/
+models/filter_res34_5/
 modesl/filter_5/
 models/classifiers/
 !models/README.md
@@ -17,6 +19,7 @@ models/classifiers/
 # Figures and plots
 !figures/README.md
 figures/graphics
+figures/
 
 # Segmentation masks or cache
 *.npy
