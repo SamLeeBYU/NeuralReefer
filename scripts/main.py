@@ -49,7 +49,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from config import SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, FILTER_MODELS_DIR, EXT, VERBOSE, M, SAVE_MASKS, METADATA
+from config import SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, FILTER_MODELS_DIR, EXT, VERBOSE, M, SAVE_MASKS, SAVE_COCO, METADATA
 
 from utils import suppress_prints, restore_prints
 from train import train, load_data
@@ -57,6 +57,8 @@ from visualize import plot_segmentation_summary, plot_coral_cover
 
 from filter import CoralFilterEnsembler
 from segmenter import CoralSegmenter
+
+from export_coco import COCOExporter
 
 def inference(image_dir: str, output_file: str) -> pd.DataFrame:
     """
@@ -81,6 +83,8 @@ def inference(image_dir: str, output_file: str) -> pd.DataFrame:
         device=device
     )
 
+    exporter = COCOExporter(coral_filter.classes)
+
     image_paths = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if f.endswith(EXT)]
     genus_names = sorted(set(
         k.split(":")[0] for k in segmenter.coral_filter.classes
@@ -90,15 +94,35 @@ def inference(image_dir: str, output_file: str) -> pd.DataFrame:
     save_dir = Path(f"{image_dir}/inference")
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    results = []
-    for i, img_path in enumerate(tqdm(image_paths)):
-        image_id = Path(img_path).stem.split('_')[0]
+    images_done = set()
+    if os.path.exists(output_file):
+        existing = pd.read_csv(output_file)
+        images_done = set(existing["image_id"].astype(str).tolist())
+        results = existing.to_dict("records")
+    else:
+        results = []
 
-        if not VERBOSE: suppress_prints()
-        masks, labels = segmenter.predict(img_path=img_path, init_models=(i==0), verbose=VERBOSE)
-        if not VERBOSE: restore_prints()
+    try:
+        for i, img_path in enumerate(tqdm(image_paths)):
+            image_id = Path(img_path).stem.split('_')[0]
+
+            if image_id in images_done:
+                continue
+
+            if not VERBOSE: suppress_prints()
+            masks, labels = segmenter.predict(img_path=img_path, init_models=(i==0), verbose=VERBOSE)
+            if not VERBOSE: restore_prints()
 
         pred_labels = segmenter.coral_filter.get_class_names(labels, segmenter.coral_filter.classes)
+
+        if SAVE_COCO:
+            img = segmenter.load_image(img_path=img_path)
+            H, W = img.shape[:2]
+            exporter.add_image(os.path.basename(img_path), H, W, i)
+
+            for j, mask in enumerate(masks):
+                if j >= len(pred_labels): continue
+                exporter.add_annotation(i, mask, pred_labels[j])
 
         cover = segmenter.coral_cover(masks, cs=segmenter.crop_space)
         pct_bleached = segmenter.coral_cover(
@@ -135,28 +159,53 @@ def inference(image_dir: str, output_file: str) -> pd.DataFrame:
 
         results.append(record)
         if i % 100 == 0:
-            results.to_csv(output_file, index=False)
+                pd.DataFrame(results).to_csv(output_file, index=False)
+
+    except KeyboardInterrupt:
+        pd.DataFrame(results).to_csv(output_file, index=False)
+        if SAVE_COCO:
+            output_json = (
+                f"{args.COCOJSON_file}/annotations_coco.json"
+                if args.COCOJSON_file is not None
+                else f"{image_dir}/annotations_coco.json"
+            )
+            exporter.save(output_json)
+            if VERBOSE:
+                print(f"Predicted masks saved to {output_json}")
+        raise
+
+    if SAVE_COCO:
+        output_json = (
+            f"{args.COCOJSON_file}/annotations_coco.json"
+            if args.COCOJSON_file is not None
+            else f"{image_dir}/annotations_coco.json"
+        )
+        exporter.save(output_json)
+        if VERBOSE:
+            print(f"Predicted masks saved to {output_json}")
+
     return pd.DataFrame(results)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NeuralReefer")
-    parser.add_argument("--mode", type=str, default="inference", choices=["train", "visualize-coral-cover", "inference"], help="Execution mode")
-    #parser.add_argument("--version", type=str, required=False, help="Version identifier for visualizations")
+    parser.add_argument("--mode", type=str, default="inference", choices=["train", "visualize", "inference"], help="Execution mode")
+    parser.add_argument("--version", type=str, required=False, help="Version identifier for visualizations")
     parser.add_argument("--image_dir", type=str, required=False, help="Directory of images to evaluate")
-    parser.add_argument("--predictions_file", type=str, required=False, help="File path of evaluations (generated from mode=inference)")
-
+    parser.add_argument("--prediction_file", type=str, required=False, help="File path of evaluations (generated from mode=inference)")
+    parser.add_argument("--COCOJSON_file", type=str, required=False, help="File path of predicted masks (generated from mode=inference)")
+   
     args = parser.parse_args()
 
     if args.mode == "train":
         train()
 
     elif args.mode == "visualize":
-        assert args.prediction_file
-        plot_coral_cover(args.prediction_file)
+        #assert args.prediction_file
+        plot_coral_cover(version=args.prediction_file)
 
     elif args.mode == "inference":
         assert args.image_dir, "Must provide --image_dir"
-        output_file = f"{args.image_dir}/inference/inference.csv"
+        output_file = f"{args.image_dir}/inference/inference_statistics.csv"
         predictions_data = inference(args.image_dir, output_file)
 
         if METADATA is not None:

@@ -20,6 +20,8 @@ REMAP_PATH = "data/remap.json"
 
 #Do you want to save the predicted annotations as an image?
 SAVE_MASKS = True
+#Do you want to save the predicted annotations in COCO format?
+SAVE_COCO = True
 #How many pixels in the image file are not part of the actual image
 CROP_SPACE = 7130
 
