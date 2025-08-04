@@ -158,10 +158,8 @@ def inference(image_dir: str, output_file: str) -> pd.DataFrame:
                                  save_path=save_dir / f"{image_id}.png")
 
         results.append(record)
-        if i % 100 == 0:
-                pd.DataFrame(results).to_csv(output_file, index=False)
 
-    except KeyboardInterrupt:
+    finally:
         pd.DataFrame(results).to_csv(output_file, index=False)
         if SAVE_COCO:
             output_json = (
@@ -172,18 +170,7 @@ def inference(image_dir: str, output_file: str) -> pd.DataFrame:
             exporter.save(output_json)
             if VERBOSE:
                 print(f"Predicted masks saved to {output_json}")
-        raise
-
-    if SAVE_COCO:
-        output_json = (
-            f"{args.COCOJSON_file}/annotations_coco.json"
-            if args.COCOJSON_file is not None
-            else f"{image_dir}/annotations_coco.json"
-        )
-        exporter.save(output_json)
-        if VERBOSE:
-            print(f"Predicted masks saved to {output_json}")
-
+        
     return pd.DataFrame(results)
 
 if __name__ == "__main__":
