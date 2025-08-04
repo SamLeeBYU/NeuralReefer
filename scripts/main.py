@@ -113,51 +113,51 @@ def inference(image_dir: str, output_file: str) -> pd.DataFrame:
             masks, labels = segmenter.predict(img_path=img_path, init_models=(i==0), verbose=VERBOSE)
             if not VERBOSE: restore_prints()
 
-        pred_labels = segmenter.coral_filter.get_class_names(labels, segmenter.coral_filter.classes)
+            pred_labels = segmenter.coral_filter.get_class_names(labels, segmenter.coral_filter.classes)
 
-        if SAVE_COCO:
-            img = segmenter.load_image(img_path=img_path)
-            H, W = img.shape[:2]
-            exporter.add_image(os.path.basename(img_path), H, W, i)
+            if SAVE_COCO:
+                img = segmenter.load_image(img_path=img_path)
+                H, W = img.shape[:2]
+                exporter.add_image(os.path.basename(img_path), H, W, i)
 
-            for j, mask in enumerate(masks):
-                if j >= len(pred_labels): continue
-                exporter.add_annotation(i, mask, pred_labels[j])
+                for j, mask in enumerate(masks):
+                    if j >= len(pred_labels): continue
+                    exporter.add_annotation(i, mask, pred_labels[j])
 
-        cover = segmenter.coral_cover(masks, cs=segmenter.crop_space)
-        pct_bleached = segmenter.coral_cover(
-            [masks[j] for j in range(len(pred_labels)) if pred_labels[j].endswith(":bleached")],
-            cs=segmenter.crop_space
-        )
-
-        genus_cover = {}
-        genus_cover_healthy = {}
-        for genus in genus_names:
-            genus_cover[genus] = segmenter.coral_cover(
-                [masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(f"{genus}:")],
+            cover = segmenter.coral_cover(masks, cs=segmenter.crop_space)
+            pct_bleached = segmenter.coral_cover(
+                [masks[j] for j in range(len(pred_labels)) if pred_labels[j].endswith(":bleached")],
                 cs=segmenter.crop_space
-            )
-            genus_cover_healthy[genus] = segmenter.coral_cover(
-                [masks[j] for j in range(len(pred_labels)) if pred_labels[j] == f"{genus}:healthy"],
-                cs=segmenter.crop_space
-            )
+            )  
 
-        record = {
-            "image": img_path,
-            "image_id": image_id,
-            "coral_cover_pred": cover,
-            "pct_bleached_pred": pct_bleached,
-        }
+            genus_cover = {}
+            genus_cover_healthy = {}
+            for genus in genus_names:
+                genus_cover[genus] = segmenter.coral_cover(
+                    [masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(f"{genus}:")],
+                    cs=segmenter.crop_space
+                )
+                genus_cover_healthy[genus] = segmenter.coral_cover(
+                    [masks[j] for j in range(len(pred_labels)) if pred_labels[j] == f"{genus}:healthy"],
+                    cs=segmenter.crop_space
+                )
 
-        for g in genus_names:
-            record[f"cover_pred__{g}"] = genus_cover[g]
-            record[f"cover_healthy_pred__{g}"] = genus_cover_healthy[g]
+            record = {
+                "image": img_path,
+                "image_id": image_id,
+                "coral_cover_pred": cover,
+                "pct_bleached_pred": pct_bleached,
+            }
 
-        if SAVE_MASKS:
-            segmenter.show_masks(masks, segmenter.color_map, pred_labels, show=False,
-                                 save_path=save_dir / f"{image_id}.png")
+            for g in genus_names:
+                record[f"cover_pred__{g}"] = genus_cover[g]
+                record[f"cover_healthy_pred__{g}"] = genus_cover_healthy[g]
 
-        results.append(record)
+            if SAVE_MASKS:
+                segmenter.show_masks(masks, segmenter.color_map, pred_labels, show=False,
+                                        save_path=save_dir / f"{image_id}.png")
+
+            results.append(record)
 
     finally:
         pd.DataFrame(results).to_csv(output_file, index=False)

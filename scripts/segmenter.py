@@ -105,7 +105,7 @@ class SAM2Segmenter:
             'gamma': hyperparameters['gamma']
         }
 
-        print(f"Loaded segmentation hyperparamters from {hyperparam_file}")
+        print(f"Loaded segmentation hyperparameters from {hyperparam_file}")
 
     # Parse COCO Annotations
     def parse_annotations(self, annotation_path):
