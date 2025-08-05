@@ -60,13 +60,15 @@ from segmenter import CoralSegmenter
 
 from export_coco import COCOExporter
 
-def inference(image_dir: str, output_file: str) -> pd.DataFrame:
+def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = None) -> pd.DataFrame:
     """
     Evaluates coral cover for a directory of images using a trained CoralSegmenter.
 
     Args:
         image_dir (str): Directory containing images to process.
-        output_file (str): File to write results.
+        output_file (str): CSV file where aggregated results are saved.
+        COCO_output_dir (str): Directory to save COCO format annotations.
+            If None, annotations will be saved in the same directory as images.
 
     Returns:
         pd.DataFrame: DataFrame with image metadata and coral cover breakdown.
@@ -162,11 +164,9 @@ def inference(image_dir: str, output_file: str) -> pd.DataFrame:
     finally:
         pd.DataFrame(results).to_csv(output_file, index=False)
         if SAVE_COCO:
-            output_json = (
-                f"{args.COCOJSON_file}/annotations_coco.json"
-                if args.COCOJSON_file is not None
-                else f"{image_dir}/annotations_coco.json"
-            )
+            output_dir = COCO_output_dir if COCO_output_dir is not None else image_dir
+            output_json = f"{output_dir}/annotations_coco.json"
+
             exporter.save(output_json)
             if VERBOSE:
                 print(f"Predicted masks saved to {output_json}")
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     elif args.mode == "inference":
         assert args.image_dir, "Must provide --image_dir"
         output_file = f"{args.image_dir}/inference/inference_statistics.csv"
-        predictions_data = inference(args.image_dir, output_file)
+        predictions_data = inference(args.image_dir, output_file, args.COCOJSON_file)
 
         if METADATA is not None:
             metadata = load_data(METADATA)
