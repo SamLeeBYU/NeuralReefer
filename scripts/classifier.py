@@ -19,13 +19,13 @@ weights_dict = {18: ResNet18_Weights, 34: ResNet34_Weights, 50: ResNet50_Weights
 
 class CoralClassifier(nn.Module):
 
-    # This module implements the CoralClassifier class, a deep convolutional neural network (CNN) optimized for 
-    # binary classification of segmented coral reef image crops. The model leverages a pretrained ResNet architecture, 
-    # replacing the final fully connected (FC) layer with a custom multi-layer perceptron (MLP) head composed of 
+    # This module implements the CoralClassifier class, a deep convolutional neural network (CNN) optimized for
+    # binary classification of segmented coral reef image crops. The model leverages a pretrained ResNet architecture,
+    # replacing the final fully connected (FC) layer with a custom multi-layer perceptron (MLP) head composed of
     # ReLU activations and dropout regularization for improved generalization.
 
     # The last layer may be modified depending on the dimension of the output using the argument 'dim'
-    
+
     def __init__(self, pretrained=True, dim=1, res=18):
 
         super(CoralClassifier, self).__init__()
@@ -74,7 +74,34 @@ class EnsembleOptimizer(torch.nn.Module):
         norm_weights = self.weights / self.weights.sum(dim=1, keepdim=True)  # shape: [M, K]
         z = torch.einsum('nmk,mk->nk', X, norm_weights)  # Weighted sum
         return z
-    
+
+class EnsembleOptimizer(torch.nn.Module):
+    def __init__(self, M, K):
+        super().__init__()
+        self.M = M
+        self.K = K
+
+        #Class-wise weights W: [M, K]
+        self.weights = torch.nn.Parameter(torch.ones(M, K) / K)
+
+        #Model-level weights alpha: [M]
+        self.alpha = torch.nn.Parameter(torch.ones(M))
+
+    def forward(self, X):  #X: [N, M, K]
+        #Normalize W_m across K
+        W_normalized = self.weights / self.weights.sum(dim=1, keepdim=True)  # [M, K]
+
+        #Normalize alpha across M
+        alpha_normalized = torch.softmax(self.alpha, dim=0)  # [M]
+        alpha_expanded = alpha_normalized.unsqueeze(1)  # [M, 1]
+
+        #Compute combined weight: T_{m,k} = alpha_m * W_{m,k}
+        combined_weights = alpha_expanded * W_normalized  # [M, K]
+
+        #Weighted sum over models: z_i = sum_m sum_k T_{m,k} * z_i^{(m,k)}
+        z = torch.einsum('nmk,mk->nk', X, combined_weights)  # [N, K]
+        return z
+
 
 #This code comes from https://github.com/itakurah/Focal-loss-PyTorch/blob/main/focal_loss.py
 class FocalLoss(nn.Module):
@@ -211,7 +238,7 @@ class FocalLoss(nn.Module):
         elif self.reduction == 'sum':
             return loss.sum()
         return loss
-    
+
 def create_loss_fn(weight=None, use_focal=True, gamma=2.0, task_type='multi-class', reduction='mean'):
     """
     Creates a loss function for classification, supporting both CrossEntropyLoss and FocalLoss.
