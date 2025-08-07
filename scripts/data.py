@@ -1,6 +1,6 @@
 """
 Dataset utilities for extracting and processing cropped mask regions
-from coral reef images. Includes the MaskLoader class which builds a 
+from coral reef images. Includes the MaskLoader class which builds a
 balanced dataset of coral vs. non-coral crops for downstream classification.
 """
 
@@ -25,12 +25,12 @@ class MaskLoader(Dataset):
 
         """
         PyTorch dataset class for constructing a labeled image crop dataset for binary coral classification.
-        
+
         Supports two modes: loading preprocessed data from disk or generating it dynamically using a segmentation model.
-        
+
         Creating the data set a priori (as is done here) and then loading in the data in the RAM come training comes with its limitations, but
         in general, greatly speeds up model training times
-        
+
         Ground truth masks are treated as coral instances pertaining to genus/bleached category (defined in remap.json), while non-overlapping predicted masks are labeled as 'noncoral'.
 
         Args:
@@ -61,16 +61,16 @@ class MaskLoader(Dataset):
     def __len__(self):
         #Needed for a pytorch data loader
         return len(self.labels)
-    
+
     def __getitem__(self, idx):
         #Needed for a pytorch data loader
         X_i = self.img_data[idx]
         y_i = self.labels[idx]
         return X_i, y_i
-    
+
     def _load_dataset(self, file_path):
         print(f"Loading dataset from {file_path}")
-        data = torch.load(file_path, weights_only=False)
+        data = torch.load(file_path, weights_only=True)
 
         labels = data["labels"]              # one-hot: shape [N, K]
         classes = data["classes"]            # dict: class → index
@@ -108,7 +108,7 @@ class MaskLoader(Dataset):
         self.class_distribution = self.get_class_distribution(self.labels)
         #Counter({10: 49932, 3: 5142, 2: 2393, 9: 1818, 8: 1573, 7: 1483, 16: 682, 5: 659, 14: 527, 1: 383, 12: 318, 0: 285, 15: 219, 13: 114, 11: 82, 4: 44, 6: 27})
         self.img_data = self.augment(data["img_data"], self.transform_fn)
-        
+
         if reindex:
             self.save_data(MASK_DATA_PATH)
 
@@ -161,12 +161,12 @@ class MaskLoader(Dataset):
         torch.save({
             "classes": self.classes,
             "labels": self.labels,
-            "img_data": self.img_data, 
+            "img_data": self.img_data,
         }, save_path)
         #Save classes to json CLASSES_FILE
         with open(CLASSES_FILE, 'w') as f:
             json.dump(self.classes, f, indent=4)
-            
+
     def _create_dataset(self, images: List[str], tolerance=0.1, min_area=400):
 
         """
@@ -188,14 +188,14 @@ class MaskLoader(Dataset):
 
         for img_path in tqdm(images, desc="Loading Ground Truth Masks"):
             genus_labels, bleach_labels, gt_masks = self.segmentation_model.get_gt_masks(img_path)
-            
+
             genus_labels_set.append(genus_labels)
             bleached_labels_set.append(bleach_labels)
-            
+
             gt_masks_set.append(gt_masks)
 
         for i, x in tqdm(enumerate(images), desc="Extrapolating masks from image"):
-            
+
             #Extract gt masks
             np_image = self.segmentation_model.resize_image(
                 np.array(Image.open(x)), self.segmentation_model.img_size
@@ -224,7 +224,7 @@ class MaskLoader(Dataset):
             #Use the predicted masks to extract objects that are separate objects from the gt masks
             gt_map = np.any(gt_masks_set[i], axis=0)
             for j, pred_mask in enumerate(pred_masks):
-                
+
                 overlap = np.logical_and(pred_mask, gt_map).sum()/pred_mask.sum()
 
                 # tolerance = how much of the overlapping crop (difference between predicted mask and actual mask) that we'd be willing to accept as a 'separate' object
@@ -235,7 +235,7 @@ class MaskLoader(Dataset):
 
         #Normalize all noncoral:bleached, noncoral:healthy (if any exist) -> noncoral to align with extrapolated mask labels
         labels = ['noncoral' if 'noncoral' in label else label for label in labels]
-        
+
         #Create a label dictionary for the ML model
         self.classes = {label: idx for idx, label in enumerate(sorted(set(labels)))}
 
@@ -255,7 +255,7 @@ class MaskLoader(Dataset):
 
     @staticmethod
     def extract(img, mask, output_size, padding=5, tf=None):
-        
+
         segmentation = img * mask
 
         #create bounding box
