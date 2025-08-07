@@ -166,7 +166,7 @@ class MaskLoader(Dataset):
             torch.Tensor: Transformed tensor of the same shape as `images`
         """
         N = len(images)
-        output = torch.empty_like(images)
+        output = torch.empty_like(images, dtype=torch.float32)
 
         with torch.no_grad():
             for i in tqdm(range(0, N, batch_size), desc="Augmenting Masks"):
