@@ -106,7 +106,7 @@ class MaskLoader(Dataset):
             self.classes = classes
 
         self.class_distribution = self.get_class_distribution(self.labels)
-        #Counter({10: 49932, 3: 5142, 2: 2393, 9: 1818, 8: 1573, 7: 1483, 16: 682, 5: 659, 14: 527, 1: 383, 12: 318, 0: 285, 15: 219, 13: 114, 11: 82, 4: 44, 6: 27})
+        #Counter({10: 39019, 3: 3511, 2: 1802, 9: 1365, 8: 1019, 7: 858, 5: 483, 14: 464, 16: 446, 1: 281, 12: 253, 0: 192, 15: 150, 13: 106, 11: 77, 4: 23, 6: 13})
         self.img_data = self.augment(data["img_data"], self.transform_fn)
 
         if reindex:
@@ -143,6 +143,7 @@ class MaskLoader(Dataset):
 
             new_augmented_imgs = self.augment(new_imgs_batch, self.transform_fn)
 
+            #Concatenating torch tensors is computationally expensive. Consider changing in the future
             self.raw_data = torch.cat([self.raw_data, new_imgs_batch])
             self.img_data = torch.cat([self.img_data, new_augmented_imgs])
             self.labels   = torch.cat([self.labels, new_labels_batch])
@@ -152,9 +153,32 @@ class MaskLoader(Dataset):
         self.img_data = self.augment(self.raw_data, self.transform_fn)
 
     @staticmethod
-    def augment(images: torch.tensor, transform_fn):
-        #This allows us to apply post-processing augmentations in a flexible way (so we don't have to apply augmentations in the _create_dataset method)
-        return transform_fn(images.clone())
+    def augment(images: torch.Tensor, transform_fn, batch_size=1000):
+        """
+        Apply transform_fn to `images` in batches to reduce memory usage.
+
+        Args:
+            images (torch.Tensor): Tensor of shape [N, ...]
+            transform_fn (Callable): Augmentation function applied to each batch
+            batch_size (int): Number of images per batch
+
+        Returns:
+            torch.Tensor: Transformed tensor of the same shape as `images`
+        """
+        N = len(images)
+        output = torch.empty_like(images)
+
+        with torch.no_grad():
+            for i in tqdm(range(0, N, batch_size), desc="Augmenting Masks"):
+                batch = images[i:i+batch_size].clone()
+                transformed = transform_fn(batch)
+
+                if transformed.shape != batch.shape:
+                    raise ValueError(f"Transform_fn changed shape from {batch.shape} to {transformed.shape}")
+
+                output[i:i+len(transformed)] = transformed
+
+        return output
 
     def save_data(self, save_path):
         print(f"Saving dataset to {save_path}")
