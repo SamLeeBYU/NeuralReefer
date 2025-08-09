@@ -67,41 +67,29 @@ class EnsembleOptimizer(torch.nn.Module):
         super().__init__()
         self.M = M
         self.K = K
-        self.weights = torch.nn.Parameter(torch.ones(M, K) / K)
+
+        self.alpha = torch.nn.Parameter(torch.randn(M))       # [M]
+        self.weights = torch.nn.Parameter(torch.randn(M, K))  # [M, K]
 
     def forward(self, X):  # X: [N, M, K]
-        # Normalize each model's weights across K classes
-        norm_weights = self.weights / self.weights.sum(dim=1, keepdim=True)  # shape: [M, K]
-        z = torch.einsum('nmk,mk->nk', X, norm_weights)  # Weighted sum
-        return z
+        N, M, K = X.shape
+        assert M == self.M and K == self.K
 
-class EnsembleOptimizer(torch.nn.Module):
-    def __init__(self, M, K):
-        super().__init__()
-        self.M = M
-        self.K = K
+        #Normalize across K classes for each model
+        norm_weights = F.softmax(self.weights, dim=1)  # [M, K]
 
-        #Class-wise weights W: [M, K]
-        self.weights = torch.nn.Parameter(torch.ones(M, K) / K)
+        # Normalize across M models
+        norm_alpha = F.softmax(self.alpha, dim=0).unsqueeze(0)  # [1, M]
 
-        #Model-level weights alpha: [M]
-        self.alpha = torch.nn.Parameter(torch.ones(M))
+        probs = F.softmax(X, dim=2)  # [N, M, K]; each row over K sums to 1
+        weighted_probs = norm_weights.unsqueeze(0) * probs  # [N, M, K]
 
-    def forward(self, X):  #X: [N, M, K]
-        #Normalize W_m across K
-        W_normalized = self.weights / self.weights.sum(dim=1, keepdim=True)  # [M, K]
+        row_sums = weighted_probs.sum(dim=2, keepdim=True)  # [N, M, 1]
+        weighted_probs_normalized = weighted_probs / row_sums  # [N, M, K]
 
-        #Normalize alpha across M
-        alpha_normalized = torch.softmax(self.alpha, dim=0)  # [M]
-        alpha_expanded = alpha_normalized.unsqueeze(1)  # [M, 1]
+        p = (norm_alpha.unsqueeze(2) * weighted_probs_normalized).sum(dim=1)  # [N, K]
 
-        #Compute combined weight: T_{m,k} = alpha_m * W_{m,k}
-        combined_weights = alpha_expanded * W_normalized  # [M, K]
-
-        #Weighted sum over models: z_i = sum_m sum_k T_{m,k} * z_i^{(m,k)}
-        z = torch.einsum('nmk,mk->nk', X, combined_weights)  # [N, K]
-        return z
-
+        return p  # [N, K], each row sums to 1
 
 #This code comes from https://github.com/itakurah/Focal-loss-PyTorch/blob/main/focal_loss.py
 class FocalLoss(nn.Module):
@@ -185,7 +173,8 @@ class FocalLoss(nn.Module):
             alpha = self.alpha.to(inputs.device)
 
         # Convert logits to probabilities with softmax
-        probs = F.softmax(inputs, dim=1)
+        #In our case, we are reweighting the probabilities across models, so the resuling probability already lives in the simplex
+        probs = inputs #F.softmax(inputs, dim=1)
 
         # One-hot encode the targets
         targets = targets.argmax(dim=1)
