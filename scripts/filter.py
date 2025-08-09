@@ -14,8 +14,8 @@ from collections import Counter
 
 import torch
 import torch.nn as nn
-from torchvision.io import decode_image 
-from torch.utils.data import DataLoader, Subset
+from torchvision.io import decode_image
+from torch.utils.data import DataLoader, Subset, TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import roc_auc_score, confusion_matrix
@@ -58,8 +58,8 @@ class CoralFilter:
     def __init__(self, model: CoralClassifier, dataset: MaskLoader, device=None, loss_fn=nn.CrossEntropyLoss(), epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.3, train=True, seed=42, bootstrap=False):
 
         self.device = device or (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
-        if VERBOSE:
-            print(f"using device: {self.device}")
+        # if VERBOSE:
+        #     print(f"using device: {self.device}")
         self.model = model.to(self.device)
 
         self.loss_fn = loss_fn
@@ -82,7 +82,7 @@ class CoralFilter:
                 test_size = split,
                 stratify = self.dataset.labels.numpy(),
                 #It is imperative that each of these submodels are trained on a bootstrapped distribution
-                #of the *same* training data to appropriately explore the sampling distribution 
+                #of the *same* training data to appropriately explore the sampling distribution
                 random_state=seed
             )
             #array([45836, 65131, 20203, ..., 54551, 34767, 67438], shape=(51338,))
@@ -156,7 +156,7 @@ class CoralFilter:
             avg_loss = epoch_loss / len(self.train_loader)
             accuracy = correct / total if total > 0 else 0
             print(f"Epoch {epoch+1}, Avg. Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}")
-            
+
             val_loss = self.test()
 
             #Early stopping mechanism
@@ -167,13 +167,13 @@ class CoralFilter:
             else:
                 bad_epochs += 1
                 print(f"Validation loss did not improve for {bad_epochs} epoch(s).")
-            
+
             if bad_epochs >= patience:
                 print(f"\nEarly stopping triggered after {epoch+1} epochs.")
                 break
 
         self.model.load_state_dict(best_model)
-    
+
     def test(self):
 
         """
@@ -223,11 +223,11 @@ class CoralFilter:
             f"Accuracy: {accuracy:.4f} | "
             f"Precision: {precision:.4f} | "
             f"Recall: {recall:.4f}\n")
-        
+
         return test_loss
 
     def predict(self, masks, img = None, img_path: str = None, mask_size=None, transform_fn=None):
-        
+
         mask_size = mask_size or MASK_SIZE
         transform_fn = transform_fn or MASK_TRANSFORM_AUGMENT
 
@@ -244,7 +244,7 @@ class CoralFilter:
         with torch.no_grad():
             pred = self.model(X)
         return pred.cpu().numpy()
-    
+
     def save_model(self, path):
         torch.save(self.model.state_dict(), path)
 
@@ -257,7 +257,7 @@ class CoralFilter:
 class CoralFilterEnsembler:
 
     def __init__(self, base_dataset: str, base_model = None, device=None, m=5, epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.1, seed=42):
-        
+
         self.device = device or (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
 
         self.base_dataset = base_dataset
@@ -274,7 +274,7 @@ class CoralFilterEnsembler:
             #Preliminary estimates suggest that our images contain 30-40% coral cover, on average
             #However, the data that will the models will be trained with is inflated with negative labels to increase sample size (resulting in 80:20 ratio of negative to positive labels)
             #Note that the inflated data *is* representative of the data that will ultimately be fed into the trained models because of *where* (the stage at which) the model is implemented
-            
+
             #labels = self.mask_data.labels.numpy()
             # base_rates = np.mean(labels, axis=0)
             # weights = 1.0 / base_rates
@@ -301,14 +301,14 @@ class CoralFilterEnsembler:
         self.weight_decay = weight_decay
         self.split = split
         self.seed = seed
-        
+
         self.models = []
         self.ensemble_model = EnsembleOptimizer(self.m, self.k)
 
     def train(self, ensemble_split=0.1):
         for i in range(self.m):
             print(f"Creating model {i+1}/{self.m}")
-            model_i = CoralFilter(self.base_model(pretrained=True, dim=self.k, res=RES), self.mask_data, self.device, 
+            model_i = CoralFilter(self.base_model(pretrained=True, dim=self.k, res=RES), self.mask_data, self.device,
                                   create_loss_fn(use_focal=False), #Generic CCE loss for each submodule
                                   batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=True, seed=self.seed, bootstrap=True)
             model_i.train(patience=PATIENCE)
@@ -358,9 +358,9 @@ class CoralFilterEnsembler:
         weights[self.noncoral_class] = NEG_WEIGHT
 
         self.ensemble_model = EnsembleOptimizer(M, K).to(self.device)
-        self.loss_fn = create_loss_fn(use_focal=True, gamma=3.0, reduction='sum', weight=weights).to(self.device)
+        self.loss_fn = create_loss_fn(use_focal=True, gamma=0, reduction='sum', weight=weights).to(self.device)
         self.train_weights()
-        
+
         #label-shift correction following Lipton et. al (2018) (Under Construction - We might not need it?)
         #self.X_test_balanced, self.y_test_balanced = self.resample(self.X_test, self.y_test, self.mask_data.class_distribution, n=len(ensemble_test_idx))
         # y_hat_probs = torch.softmax(self.ensemble_model(self.X_train), dim=1)
@@ -378,7 +378,7 @@ class CoralFilterEnsembler:
 
         # cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 
-        # sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues', 
+        # sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
         #             xticklabels=class_names, yticklabels=class_names)
         # plt.xlabel('Predicted')
         # plt.ylabel('True')
@@ -390,30 +390,47 @@ class CoralFilterEnsembler:
         # self.loss_fn = create_loss_fn(use_focal=True, weight=torch.tensor(1/w/sum(1/w), dtype=torch.float32)).to(self.device)
         # self.train_weights()
 
-    def train_weights(self, epochs=100000):
+    def train_weights(self, epochs=100000, batch_size=100, patience=100):
+
+        # dataset = TensorDataset(self.X_train, self.y_train)
+        # loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
         optimizer = torch.optim.Adam(self.ensemble_model.parameters(), lr=self.lr)
-        min_loss = 1e16
+        min_val_loss = float('inf')
         bad_epochs = 0
+        best_model = None
+
         for epoch in tqdm(range(epochs), desc="Learning Ensemble Weights"):
+            val_loss = 0.0
+            # for X_batch, y_batch in loader:
             optimizer.zero_grad()
-            z = self.ensemble_model(self.X_train)
-            loss = self.loss_fn(z, self.y_train)
+            p = self.ensemble_model(self.X_train)
+            loss = self.loss_fn(p, self.y_train)
             loss.backward()
             optimizer.step()
-            if loss.item() < min_loss:
+
+            self.ensemble_model.eval()
+            with torch.no_grad():
+                val_preds = self.ensemble_model(self.X_test)
+                val_loss = self.loss_fn(val_preds, self.y_test).item()
+
+            if val_loss < min_val_loss:
                 bad_epochs = 0
-                min_loss = loss.item()
+                min_val_loss = val_loss
                 best_model = self.ensemble_model.state_dict()
             else:
                 bad_epochs += 1
-            if bad_epochs > PATIENCE:
+
+            if bad_epochs > patience:
                 break
-        self.ensemble_model.load_state_dict(best_model)
+
+        if best_model is not None:
+            self.ensemble_model.load_state_dict(best_model)
 
     @staticmethod
     def resample(x, y, class_distribution, n=1000):
         K = y.shape[1]
-        
+
         labels_argmax = torch.argmax(y, dim=1).cpu().numpy()
 
         class_buckets = {k: [] for k in range(K)}
@@ -495,13 +512,12 @@ class CoralFilterEnsembler:
         for m in tqdm(range(self.m), desc="Classifying"):
             model = self.models[m]
             logits[:,m,:] = model.predict(masks, img, img_path, mask_size)
-        
+
         with torch.no_grad():
-            ensemble_logits = self.ensemble_model(torch.tensor(logits).to(self.device))
-            ensemble_proba = torch.softmax(ensemble_logits, dim=1)
+            ensemble_proba = self.ensemble_model(torch.tensor(logits).to(self.device))
 
         return ensemble_proba.cpu().numpy()
-    
+
     @staticmethod
     def get_class_names(labels, class_dict):
         index_to_class = {v: k for k, v in class_dict.items()}
