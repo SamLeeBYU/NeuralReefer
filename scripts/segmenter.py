@@ -141,7 +141,7 @@ class SAM2Segmenter:
 
     @staticmethod
     def gen_params(param_dic, random=False, seed=42, n_samples=50):
-       
+
         keys = param_dic.keys()
         param_grid = [dict(zip(keys, values)) for values in itertools.product(*param_dic.values())]
 
@@ -161,7 +161,7 @@ class SAM2Segmenter:
         self.image = self.resize_image(self.image, self.img_size)
 
         return self.augment(self.image, whiteBalance=whiteBalance, redBoost=redBoost, clipLimit=clipLimit, tileGridSize=tileGridSize, gamma=gamma)
-    
+
     @staticmethod
     def resize_image(img: np.array, size) -> np.array:
         return cv2.resize(img, size, interpolation=cv2.INTER_AREA)
@@ -187,7 +187,7 @@ class SAM2Segmenter:
             return None, None, np.array([])
         else:
             return genus_labels, bleached_labels, np.stack([cv2.fillPoly(np.zeros((1024, 1024), dtype=np.int8), [mask], 1) > 0 for mask in masks])
-        
+
     # Image Augmentation Methods ####################################################################################
     @staticmethod
     def white_balance(img):
@@ -196,7 +196,7 @@ class SAM2Segmenter:
         scale = avg.mean() / avg
         result *= scale
         return np.clip(result, 0, 255).astype(np.uint8)
-    
+
     @staticmethod
     def boost_red_by_blueshift(img, factor_range=(1.0, 1.4)):
         """
@@ -214,7 +214,7 @@ class SAM2Segmenter:
 
         img[:, :, 0] *= boost_mask
         return np.clip(img, 0, 255).astype(np.uint8)
-    
+
     @staticmethod
     def apply_clahe(img, clipLimit=2.0, tileGridSize=(8, 8)):
         lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
@@ -228,7 +228,7 @@ class SAM2Segmenter:
     def gamma_correction(img, gamma=0.8):
         inv_gamma = 1.0 / gamma
         table = np.array([(i / 255.0) ** inv_gamma * 255 for i in range(256)]).astype("uint8")
-        return cv2.LUT(img, table)    
+        return cv2.LUT(img, table)
 
     def augment(self, img, whiteBalance=True, redBoost = 1.3, clipLimit=2, tileGridSize=8, gamma=0.85):
 
@@ -291,7 +291,7 @@ class SAM2Segmenter:
 
         #########################################################################################################################
 
-        iter_count = [1] 
+        iter_count = [1]
         tuning_log = []
 
         @use_named_args(search_space)
@@ -398,28 +398,28 @@ class SAM2Segmenter:
             )
 
         return best_params
-        
+
     # Automatic SAM2 Calibration Method (ASCM) ################################################################
-    def predict(self, img_path=None, img: Image = None, 
+    def predict(self, img_path=None, img: Image = None,
                 #SAM2 Hyperparameters
-                large_feature_params=None, small_feature_params=None, 
+                large_feature_params=None, small_feature_params=None,
                 #Data Augmentation Parameters
                 whiteBalance=None, redBoost = None, clipLimit = None, tileGridSize = None, gamma = None,
                 #Merging parameters
                 overlap=None, min_area=None,
                 #Runtime arguments
                 init_models=True, verbose=True, keep_all=False):
-        
+
         min_area = min_area or MIN_AREA
         overlap = overlap or self.nr_params['overlap']
 
         #Load in the image using the augmentations needed for the segmentation model
-        image = self.load_image(img_path=img_path, img=img, 
-                                whiteBalance=whiteBalance or self.nr_params['whiteBalance'], 
-                                redBoost=redBoost or self.nr_params['redBoost'], 
-                                clipLimit=clipLimit or self.nr_params['clipLimit'], 
-                                tileGridSize=tileGridSize or self.nr_params['tileGridSize'], 
-                                gamma=gamma or self.nr_params['gamma']) 
+        image = self.load_image(img_path=img_path, img=img,
+                                whiteBalance=whiteBalance or self.nr_params['whiteBalance'],
+                                redBoost=redBoost or self.nr_params['redBoost'],
+                                clipLimit=clipLimit or self.nr_params['clipLimit'],
+                                tileGridSize=tileGridSize or self.nr_params['tileGridSize'],
+                                gamma=gamma or self.nr_params['gamma'])
 
         large_feature_params = large_feature_params or self.large_feature_params
         small_feature_params = small_feature_params or self.small_feature_params
@@ -453,7 +453,7 @@ class SAM2Segmenter:
 
         if weights is None:
             weights = np.ones(len(masks))
-        
+
         mask_idx = np.argsort([-m["predicted_iou"]*weights[i] for i, m in enumerate(masks)])
         sorted_masks = [masks[i] for i in mask_idx]
         kept = []
@@ -468,7 +468,7 @@ class SAM2Segmenter:
                 if mask.sum() < min_area:
                     continue
 
-                if (mask*occupancy_mask).sum()/mask.sum() > overlap: 
+                if (mask*occupancy_mask).sum()/mask.sum() > overlap:
                     #print("Overlapping mask... skipping")
                     continue
 
@@ -482,7 +482,7 @@ class SAM2Segmenter:
             return self.one_hot_encode(seg_map), np.array(kept)
         else:
             return np.zeros((1, 1024, 1024), dtype=bool), np.array(kept)
-  
+
     @staticmethod
     def one_hot_encode(seg_map):
         unique_ids = np.unique(seg_map)
@@ -496,12 +496,12 @@ class SAM2Segmenter:
 
         p_map = np.any(pmasks, axis=0)
         gt_map = np.any(gt_masks, axis=0)
-            
+
         tp = np.logical_and(gt_map, p_map).sum()
         fn = np.logical_and(gt_map, np.logical_not(p_map)).sum()
 
         if (tp + fn) == 0:
-            return 1.0 
+            return 1.0
         return tp / (tp + fn)
 
     @staticmethod
@@ -682,14 +682,14 @@ class CoralSegmenter(SAM2Segmenter):
 
     def __init__(self, config_path, checkpoint_path, coral_filter: CoralFilterEnsembler, annotation_path = None,
                  large_feature_params=None, small_feature_params=None, nr_params=None, device=None, cs=None):
-        
+
         super().__init__(config_path, checkpoint_path, annotation_path=annotation_path, large_feature_params=large_feature_params, small_feature_params=small_feature_params, nr_params=nr_params, device=device)
         self.coral_filter = coral_filter
         self.crop_space = cs or CROP_SPACE
         self.color_map = self._create_color_map(self.coral_filter.classes)
 
     # Automatic SAM2 Calibration Algorithm (ASCA) ################################################################
-    def predict(self, img_path=None, img: Image=None, large_feature_params=None, small_feature_params=None,             
+    def predict(self, img_path=None, img: Image=None, large_feature_params=None, small_feature_params=None,
                 whiteBalance=None,
                 clipLimit=None,
                 tileGridSize=None,
@@ -697,22 +697,22 @@ class CoralSegmenter(SAM2Segmenter):
                 gamma=None,
                 overlap=None,
                 min_area=None, mask_size=None, coral_thresh=0.5, init_models=True, verbose=True):
-        
+
         min_area = min_area or MIN_AREA
         mask_size = mask_size or MASK_SIZE
         overlap = overlap or self.nr_params['overlap']
 
         with timer(verbose):
 
-            all_coral_masks = super().predict(img_path=img_path, img=img, large_feature_params=large_feature_params, small_feature_params=small_feature_params, 
+            all_coral_masks = super().predict(img_path=img_path, img=img, large_feature_params=large_feature_params, small_feature_params=small_feature_params,
                                                     #Augmentation hyperparameters
-                                                    whiteBalance=whiteBalance or self.nr_params['whiteBalance'], 
-                                                    redBoost=redBoost or self.nr_params['redBoost'], 
-                                                    clipLimit=clipLimit or self.nr_params['clipLimit'], 
-                                                    tileGridSize=tileGridSize or self.nr_params['tileGridSize'], 
+                                                    whiteBalance=whiteBalance or self.nr_params['whiteBalance'],
+                                                    redBoost=redBoost or self.nr_params['redBoost'],
+                                                    clipLimit=clipLimit or self.nr_params['clipLimit'],
+                                                    tileGridSize=tileGridSize or self.nr_params['tileGridSize'],
                                                     gamma=gamma or self.nr_params['gamma'],
                                                 #Consolidation parameter
-                                                overlap=overlap, 
+                                                overlap=overlap,
                                                 min_area=min_area, init_models=init_models, verbose=verbose, keep_all=True)
 
             #SAM2Segmenter's predict method will load in the image -> self.image and resize if necessary
@@ -726,7 +726,7 @@ class CoralSegmenter(SAM2Segmenter):
             coral_classes_p = np.abs(np.max(coral_classes_proba, axis=1)-1e-3)
             weights = coral_classes_p #1/(1-coral_classes_p)
             coral_classes_preds = np.argmax(coral_classes_proba, axis=1)
-            
+
             is_coral = coral_classes_preds != self.coral_filter.noncoral_class
             coral_masks = [mask for i, mask in enumerate(all_coral_masks) if is_coral[i]]
 
@@ -769,8 +769,8 @@ class CoralSegmenter(SAM2Segmenter):
     @staticmethod
     def coral_cover(masks, area=1024*1024, cs=0):
         return (np.sum(masks, axis=0).astype(bool)).sum() / (area - cs)
-    
-    def summary_stats(self, images):
+
+    def summary_stats(self, images, output_file="data/training_data_summary.json"):
         genus_bleach_counts = defaultdict(int)
         genus_bleach_area = defaultdict(float)
         annotations_per_image = []
@@ -778,18 +778,17 @@ class CoralSegmenter(SAM2Segmenter):
 
         for img_path in tqdm(images, desc="Computing Summary Stats"):
             genus_labels, bleach_labels, gt_masks = self.get_gt_masks(img_path)
-            
+
             if genus_labels is not None:
                 n = len(genus_labels)
             else:
                 n = 0
             annotations_per_image.append(n)
 
-            # Total coral cover (de-overlapped)
-            total_coral_area = self.coral_cover(gt_masks, cs=CROP_SPACE)
-            coral_cover_per_image.append(total_coral_area)
+            total_coral_area = gt_masks.sum()/(1024*1024-CROP_SPACE)
+            scale_factor = min(1 / total_coral_area, 1) if total_coral_area > 0 else 1
+            coral_cover_per_image.append(scale_factor * total_coral_area)
 
-            # Group masks by (genus, bleach)
             class_to_masks = defaultdict(list)
             for i in range(n):
                 genus = genus_labels[i]
@@ -798,34 +797,45 @@ class CoralSegmenter(SAM2Segmenter):
                 class_to_masks[key].append(gt_masks[i])
                 genus_bleach_counts[key] += 1
 
-            # Compute class-specific coral cover (de-overlapped within class)
+            # Compute class-specific coral cover
             for key, masks in class_to_masks.items():
-                stacked_masks = np.stack(masks, axis=0)
-                class_area = self.coral_cover(stacked_masks, cs=CROP_SPACE)
-                rel_area = class_area / total_coral_area if total_coral_area > 0 else 0
-                genus_bleach_area[key] += rel_area
+                class_area = scale_factor*np.array(masks).sum()/(1024*1024-CROP_SPACE)
+                genus_bleach_area[key] += class_area/len(images)
 
-        # Panel 1: Mask Counts
         count_df = pd.DataFrame([
             {'Genus': g, 'Bleaching': b, 'Mask Count': c}
             for (g, b), c in genus_bleach_counts.items()
         ]).sort_values(['Genus', 'Bleaching'])
 
-        annot_stats = pd.Series(annotations_per_image).describe()
-
-        # Panel 2: Coral Area
         area_df = pd.DataFrame([
-            {'Genus': g, 'Bleaching': b, 'Coral Area (px)': a}
+            {'Genus': g, 'Bleaching': b, 'Coral Cover': a}
             for (g, b), a in genus_bleach_area.items()
         ]).sort_values(['Genus', 'Bleaching'])
 
+        annot_stats = pd.Series(annotations_per_image).describe()
+
         cover_stats = pd.Series(coral_cover_per_image).describe()
+
+        summary_description = ""
 
         print("Mask Count by Genus and Bleaching")
         print(count_df.to_string(index=False))
+        summary_description += "Mask Count by Genus and Bleaching:\n" + count_df.to_string(index=False) + "\n\n"
         print("\nAnnotation Count per Image (Summary Stats)")
         print(annot_stats)
-        print("\nCoral Area by Genus and Bleaching")
+        summary_description += "Annotation Count per Image (Summary Stats):\n" + annot_stats.to_string() + "\n\n"
+        print("\nCoral Cover by Genus and Bleaching")
         print(area_df.to_string(index=False))
+        summary_description += "Coral Cover by Genus and Bleaching:\n" + area_df.to_string(index=False) + "\n\n"
         print("\nTotal Coral Cover per Image (Summary Stats)")
         print(cover_stats)
+        summary_description += "Total Coral Cover per Image (Summary Stats):\n" + cover_stats.to_string() + "\n\n"
+
+        output_data = {
+            "data_description": summary_description,
+            "annotations_per_image": annotations_per_image,
+            "coral_cover_per_image": coral_cover_per_image
+        }
+
+        with open(output_file, "w") as f:
+            json.dump(output_data, f, indent=4)
