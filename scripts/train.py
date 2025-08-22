@@ -10,16 +10,16 @@ Steps:
 
 Run as a standalone script or import train
 """
-
+import config as CFG
 from config import (
-    VERSION, TRAIN_DIR, EXT,
+    VERSION, VERSION_CODENAME, TRAIN_DIR, EXT,
     SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, 
     TUNE_SEGMENTER, N_CALLS, K, VERBOSE,
     CREATE_MASK_DATASET, MASK_SIZE, TOLERANCE, MASK_DATA_PATH,
 
     TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR, PATIENCE,
 
-    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE
+    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE, HYPERPARAM_FILE, FILTER_TTA, FILTER_TTA_SEED
 )
 
 import os
@@ -28,6 +28,7 @@ from data import MaskLoader
 from filter import CoralFilterEnsembler
 from segmenter import SAM2Segmenter, CoralSegmenter
 from transforms import MASK_TRANSFORM
+from utils import RunManager
 from pathlib import Path
 
 import pandas as pd
@@ -77,6 +78,16 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
           train_coral_filter: bool = TRAIN_CORAL_FILTER,
           eval: bool = EVAL
           ):
+    
+    rm = RunManager(version=str(VERSION), codename=VERSION_CODENAME, mode="train")
+    rm.snapshot_config(CFG, extras={
+        "mode": "train", 
+        "train_dir": TRAIN_DIR, 
+        "eval_enabled": eval, 
+        "tune_segmenter": TUNE_SEGMENTER, 
+        "create_mask_dataset": CREATE_MASK_DATASET,
+        "train_coral_filter": TRAIN_CORAL_FILTER})
+    rm.append_manifest(env=rm.env_fingerprint())
 
     images = [os.path.join(TRAIN_DIR, file) for file in os.listdir(TRAIN_DIR) if file.endswith(EXT)]
     
@@ -91,6 +102,8 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
     config_path=SAM2_CONFIG_PATH
 
     # SAM2 Hyperparameter Tuning #############################################################################################################################
+
+    out_file = f"{os.path.splitext(HYPERPARAM_FILE)[0]}_v{VERSION}.json"
 
     if tune_segmenter:
 
@@ -139,9 +152,9 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             Categorical([True], name='whiteBalance'),
             Real(0, 1.0, name='gamma')
         ]
-
-        best_params = segmenter.tune(train_images, search_space, n_calls=N_CALLS, k_samples=K, verbose=VERBOSE)
-
+       
+        best_params = segmenter.tune(train_images, search_space, n_calls=N_CALLS, k_samples=K, verbose=VERBOSE, out_file=out_file)
+        rm.copy_in(out_file, f"config/{os.path.basename(out_file)}")
     ###########################################################################################################################################################
 
     # Create Artificial Labeled Dataset for Coral Classification by
@@ -155,10 +168,13 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             checkpoint_path=checkpoint_path,
             config_path=config_path,
             annotation_path = f"{TRAIN_DIR}/_annotations.coco.json",
-            device = device
+            device = device,
+            large_feature_params = best_params if TUNE_SEGMENTER else None,
+            small_feature_params = best_params if TUNE_SEGMENTER else None,
+            nr_params = best_params if TUNE_SEGMENTER else None,
         )
 
-        maskloader = MaskLoader(train_images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE)
+        maskloader = MaskLoader(train_images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE, balance=False)
         maskloader.save_data(MASK_DATA_PATH)
             
     # Train the model to filter out non-coral masks
@@ -170,8 +186,11 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
 
     if train_coral_filter:
         coral_filter.train()
-        coral_filter.validate()
+        val_metrics = coral_filter.validate()
+        rm.save_json("metrics/val_summary.json", val_metrics)
         coral_filter.save_models(FILTER_MODELS_DIR)
+        coral_filter.save_models(rm.ckpt_dir)
+        rm.append_manifest(filter_models_dir=f"{FILTER_MODELS_DIR}, {rm.ckpt_dir}")
 
     #####################################################################################################################################
 
@@ -182,7 +201,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
 
         coral_segmenter = CoralSegmenter(config_path, checkpoint_path, coral_filter, annotation_path = f"{TRAIN_DIR}/_annotations.coco.json", device=device)
         #coral_segmenter.summary_stats(images)
-        save_dir = Path(f"figures/segmentation.v.{VERSION}")
+        save_dir = Path(rm.figures_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
 
         pixel_accuracies = np.zeros(len(test_images))
@@ -207,7 +226,10 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         print("-" * 78)
 
         for i, image in enumerate(test_images):
-            masks, labels = coral_segmenter.predict(img_path = image, init_models=(i == 0), verbose=VERBOSE)
+            masks, labels = coral_segmenter.predict(
+                img_path=image, init_models=(i == 0), verbose=VERBOSE,
+                filter_tta=FILTER_TTA, filter_tta_seed=FILTER_TTA_SEED
+            )
             pred_labels = coral_segmenter.coral_filter.get_class_names(labels, coral_segmenter.coral_filter.classes)
             genus_labels, bleach_labels, gt_masks = coral_segmenter.get_gt_masks(image)
             if genus_labels is not None:
@@ -299,7 +321,11 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         metadata['image_id'] = metadata['filename'].str.split('.').str[0]
         
         predictions_data = pd.merge(predictions_df, metadata, on='image_id', how='left')
-        pd.DataFrame(predictions_data).to_csv(f"data/performance/coral_segmenter_predictions.v.{VERSION}.csv", index=False)
+
+        run_csv = Path(rm.metrics_dir) / "coral_segmenter_predictions.csv"
+        pd.DataFrame(predictions_data).to_csv(run_csv, index=False)
+
+        pd.DataFrame(predictions_data).to_csv(f"data/performance/coral_segmenter_predictions.v.{VERSION}.csv", index=False) #deprecate
 
 if __name__ == "__main__":
     train(eval=True)

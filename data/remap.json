@@ -10,8 +10,12 @@
   "plating": "oddball",
   "montipora": "oddball",
   "porites_horizontalata": "oddball",
+  "oddball-healthy": "oddball",
+  "oddball-bleached": "oddball",
 
   "acropora_branching": "branching_acropora",
+  "branching_acropora-healthy": "branching_acropora",
+  "branching_acropora-bleached": "branching_acropora",
 
   "acropora_corymbose": "finger_acropora",
   "acropora_digitate": "finger_acropora",
@@ -19,14 +23,20 @@
   "acropora_finger": "finger_acropora",
   "acropora_0": "finger_acropora",
   "acropora_shaggy": "finger_acropora",
+  "finger_acropora-healthy": "finger_acropora",
+  "finger_acropora-bleached": "finger_acropora",
 
   "acropora_table": "table_acropora",
+  "table_acropora-healthy": "table_acropora",
+  "table_acropora-bleached": "table_acropora",
 
   "pocillopora_damicornis": "pocillopora_",
   "pocillopora_meandrina": "pocillopora_",
   "pocillopora_verrucosa": "pocillopora_",
   "pocillopora_0": "pocillopora_",
   "pocillopora": "pocillopora_",
+  "pocillopora_-healthy": "pocillopora_",
+  "pocillopora_-bleached": "pocillopora_",
   
   "mounding": "mounding_",
   "mondig": "mounding_",
@@ -37,9 +47,14 @@
   "porites_massive": "mounding_",
   "porites_australiensis": "mounding_",
   "fungia": "mounding_",
+  "mounding_-bleached": "mounding_",
+  "mounding_-healthy": "mounding_",
+  "encrusting": "mounding_",
 
   "porites_rus": "knob_porites",
   "porites_monticulosa": "knob_porites",
+  "knob_porites-healthy": "knob_porites",
+  "knob_porites-bleached": "knob_porites",
 
   "porites_deformis": "finger_porites",
   "porites_deformis_2": "finger_porites",
@@ -48,5 +63,7 @@
   "porites_finger": "finger_porites",
   "porites_cylindrica": "finger_porites",
   "portes_cylindrica": "finger_porites",
-  "heliopora": "finger_porites"
+  "heliopora": "finger_porites",
+  "finger_porites-bleached": "finger_porites",
+  "finger_porites-healthy": "finger_porites"
 }

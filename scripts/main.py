@@ -10,7 +10,7 @@ to improve coral vs non-coral classification performance. Cropped mask regions a
 data for downstream classification tasks including coral genus and bleaching status.
 
 The pipeline consists of:
-- Image preprocessing
+- Image preprocessing 
 - Ground-truth mask extraction from COCO annotations
 - SAM2 mask prediction and filtering using a ResNet-based CNN
 - Bootstrapped ensemble of CNN classifiers with logistic meta-learner
@@ -48,10 +48,13 @@ from pathlib import Path
 import pandas as pd
 import torch
 from tqdm import tqdm
+import cv2
+import numpy as np
 
-from config import SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, FILTER_MODELS_DIR, EXT, VERBOSE, M, SAVE_MASKS, SAVE_COCO, METADATA
+import config as CFG
+from config import VERSION, SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, FILTER_MODELS_DIR, EXT, VERBOSE, M, SAVE_MASKS, SAVE_COCO, METADATA, FILTER_TTA, FILTER_TTA_SEED
 
-from utils import suppress_prints, restore_prints
+from utils import suppress_prints, restore_prints, RunManager
 from train import train, load_data
 from visualize import plot_segmentation_summary, plot_coral_cover
 
@@ -74,6 +77,14 @@ def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = No
         pd.DataFrame: DataFrame with image metadata and coral cover breakdown.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    rm = RunManager(version=str(VERSION), run_name="inference")
+    rm.snapshot_config(CFG, extras={
+        "mode": "inference",
+        "image_dir": image_dir,
+        "save_masks": SAVE_MASKS,
+        "save_coco": SAVE_COCO
+    })
+    rm.append_manifest(env=rm.env_fingerprint())
 
     coral_filter = CoralFilterEnsembler(base_dataset=None, m=M, device=device)
     coral_filter.load_models(FILTER_MODELS_DIR)
@@ -93,11 +104,11 @@ def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = No
         if ":bleached" in k or ":healthy" in k
     ))
 
-    save_dir = Path(f"{image_dir}/inference")
+    save_dir = Path(rm.figures_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
     images_done = set()
-    if os.path.exists(output_file):
+    if os.path.exists(output_file): 
         existing = pd.read_csv(output_file)
         images_done = set(existing["image_id"].astype(str).tolist())
         results = existing.to_dict("records")
@@ -112,19 +123,27 @@ def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = No
                 continue
 
             if not VERBOSE: suppress_prints()
-            masks, labels = segmenter.predict(img_path=img_path, init_models=(i==0), verbose=VERBOSE)
+            masks, labels = segmenter.predict(
+                img_path=img_path, init_models=(i==0), verbose=VERBOSE,
+                filter_tta=FILTER_TTA, filter_tta_seed=FILTER_TTA_SEED
+            )
             if not VERBOSE: restore_prints()
 
             pred_labels = segmenter.coral_filter.get_class_names(labels, segmenter.coral_filter.classes)
 
             if SAVE_COCO:
-                img = segmenter.load_image(img_path=img_path)
+                img = cv2.imread(img_path)
                 H, W = img.shape[:2]
                 exporter.add_image(os.path.basename(img_path), H, W, i)
 
-                for j, mask in enumerate(masks):
+                resized_masks = [
+                    cv2.resize(mask.astype(np.uint8), (W, H), interpolation=cv2.INTER_LANCZOS4)
+                    for mask in masks
+                ]
+
+                for j, resized_mask in enumerate(resized_masks):
                     if j >= len(pred_labels): continue
-                    exporter.add_annotation(i, mask, pred_labels[j])
+                    exporter.add_annotation(i, resized_mask.astype(bool), pred_labels[j])
 
             cover = segmenter.coral_cover(masks, cs=segmenter.crop_space)
             pct_bleached = segmenter.coral_cover(
@@ -198,7 +217,6 @@ if __name__ == "__main__":
         if METADATA is not None:
             metadata = load_data(METADATA)
             metadata['image_id'] = metadata['filename'].str.split('.').str[0]
-            
             predictions_data = pd.merge(predictions_data, metadata, on='image_id', how='left')
 
         predictions_data.to_csv(output_file, index=False)

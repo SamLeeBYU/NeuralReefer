@@ -1,0 +1,117 @@
+[33mcommit c0d1a5fc2f5f0231fd994f68d9196e9a8e3a59e2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Wed Jul 30 16:21:26 2025 -0400
+
+    Update README
+
+[33mcommit a96830fcbacdb67f38a30c358f3d0940dd369b91[m
+Merge: a9a313a 2972c07
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Wed Jul 30 15:56:12 2025 -0400
+
+    Resolve main.py
+
+[33mcommit a9a313ad37b620d887498d19eca03736bb877e1a[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Wed Jul 30 15:54:41 2025 -0400
+
+    Update model to accomodate 17 classes
+
+[33mcommit 2972c077e00406efedf87315ba3e959790a2c64e[m
+Author: Calvin Quigley <55519685+calquigs@users.noreply.github.com>
+Date:   Wed Jul 30 15:29:22 2025 -0400
+
+    Save intermediate results to csv
+    
+    After every 100 inferences, save intermediate results to csv
+
+[33mcommit 25ae400941d8ca6fff4295b1abfc86b9d36172d6[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Wed Jul 30 13:58:40 2025 -0400
+
+    Change eval mode to inference mode
+
+[33mcommit 1f850ffb6535b92b262da991cb55351d228dd310[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Wed Jul 30 13:45:10 2025 -0400
+
+    Revert back to 13 classes
+
+[33mcommit fc6e8a454e1cd7ef0a22e12f26935d1922dc9b3e[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Wed Jul 30 08:57:37 2025 -0400
+
+    Expand classes
+
+[33mcommit c2d415fb5ae268e312d283a32b4a2f39b7db5b69[m
+Merge: db328d6 9a34857
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Tue Jul 29 16:43:09 2025 -0400
+
+    Fix merge
+
+[33mcommit db328d6f03bf29379a4a61d381a6272c7064e78e[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Tue Jul 29 16:41:08 2025 -0400
+
+    Implement validation mechanism
+
+[33mcommit 9a34857eda48a4cea0dcc3ac2b3f0da596934929[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Tue Jul 29 16:25:56 2025 -0400
+
+    Remove figures
+
+[33mcommit c9736aa0e2b35f447880d76c4143bf78432eddbc[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Tue Jul 29 16:21:57 2025 -0400
+
+    This should work?
+
+[33mcommit c1e856a6cb7aefa5db58da4a5369e6d85fc7d4d3[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Mon Jul 28 21:09:19 2025 -0400
+
+    NeuralReefer VERSION 1.0
+
+[33mcommit e997bd5e521d033d3dc3d19ccabece2e26003e77[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Fri Jul 25 15:05:38 2025 -0400
+
+    Rescue Mission
+
+[33mcommit c0e61ad9e2cf362ee45614e33a2289c3f4bddf80[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Wed Jul 23 19:37:56 2025 -0400
+
+    THROWING SPAGHETTI AT A WALL
+
+[33mcommit ed03e4e3a0434c46dda68c285532e12c4a1f9e13[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Tue Jul 22 15:28:20 2025 -0400
+
+    Create ensemble optimization
+
+[33mcommit 2b59cdb5c917c2a9ef295f436f26a49e35433f09[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Mon Jul 21 17:11:16 2025 -0400
+
+    Add bleaching and genus classification
+
+[33mcommit 1188ae9f7bf6186be7f35bb80cf73d534ed10b8a[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Thu Jul 17 17:10:04 2025 -0400
+
+    Add bleaching and genus classification models
+
+[33mcommit f009c016f89565d807e506cb0a7d5cb4933ff74d[m
+Author: Sam Lee <samlee.byu@gmail.com>
+Date:   Wed Jul 16 17:07:19 2025 -0400
+
+    Hello NeuralReefer
+
+[33mcommit bf0b3cb91d762623a4b36bfb9e1885a849418cb9[m
+Author: Sam Lee <120203373+SamLeeBYU@users.noreply.github.com>
+Date:   Wed Jul 16 16:56:46 2025 -0400
+
+    Initial commit

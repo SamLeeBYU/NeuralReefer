@@ -9,6 +9,8 @@ import json
 import cv2
 import numpy as np
 
+from pycocotools import mask as mask_utils
+
 import supervision
 
 class COCOExporter:
@@ -39,8 +41,30 @@ class COCOExporter:
         })
         self.image_id += 1
 
+    def add_annotation_rle(self, image_id, mask, label):
+        if not np.any(mask):
+            return
+        
+        mask = mask.astype(np.uint8)
+        rle = mask_utils.encode(np.asfortranarray(mask))
+        rle["counts"] = rle["counts"].decode("utf-8") if isinstance(rle["counts"], bytes) else rle["counts"]
+
+        x, y, w, h = cv2.boundingRect(mask)
+        area = float(np.sum(mask))
+
+        self.annotations.append({
+            "id": self.ann_id,
+            "image_id": image_id,
+            "category_id": self.category_map[label],
+            "segmentation": rle,
+            "bbox": [float(x), float(y), float(w), float(h)],
+            "area": area,
+            "iscrowd": 0
+        })
+        self.ann_id += 1
+
     def add_annotation(self, image_id, mask, label):
-        segmentation = mask_to_poly(mask)
+        segmentation = self.mask_to_poly(mask)
         if not segmentation:
             return
 
@@ -48,15 +72,25 @@ class COCOExporter:
         area = float(np.sum(mask))
 
         self.annotations.append({
-            "id": self.ann_id,
+           "id": self.ann_id,
             "image_id": image_id,
             "category_id": self.category_map[label],
             "segmentation": segmentation,
-            "bbox": [float(x), float(y), float(w), float(h)],
+             "bbox": [float(x), float(y), float(w), float(h)],
             "area": area,
-            "iscrowd": 0
+           "iscrowd": 0
         })
         self.ann_id += 1
+
+    @staticmethod
+    def mask_to_poly(mask):
+        array_polygons = supervision.mask_to_polygons(mask)
+        segmentation = []
+        for polygon in array_polygons:
+            list_polygons = polygon.flatten().tolist()
+            if len(list_polygons) >= 6:
+                segmentation.append(list_polygons)
+        return segmentation
 
     def save(self, output_path):
         with open(output_path, "w") as f:
@@ -75,12 +109,3 @@ class COCOExporter:
             #if len(poly) >= 6:
                 #segmentation.append(poly)
     #return segmentation
-
-def mask_to_poly(mask):
-    array_polygons = supervision.mask_to_polygons(mask)
-    segmentation = []
-    for polygon in array_polygons:
-        list_polygons = polygon.flatten().tolist()
-        if len(list_polygons) >= 6:
-            segmentation.append(list_polygons)
-    return segmentation

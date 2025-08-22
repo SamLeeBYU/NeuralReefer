@@ -6,8 +6,10 @@ data/test/
 data/train/*.jpg
 data/versions/
 !data/README.md
+runs/
 
 scripts/coralnet.py
+scripts/ensembler_trainer.py
 
 # Model checkpoints
 models/filter/

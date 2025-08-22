@@ -35,7 +35,8 @@ from skopt import gp_minimize, gbrt_minimize, forest_minimize  # Optimization al
 from skopt.utils import use_named_args                         # Decorators for search
 from skopt.learning import ExtraTreesRegressor                 # Surrogate model for Bayesian Optimization
 
-from config import SAM2_PATH, HYPERPARAM_FILE, REMAP_PATH, MASK_SIZE, IMG_SIZE, VERBOSE, MIN_AREA, CROP_SPACE
+from config import SAM2_PATH, HYPERPARAM_FILE, REMAP_PATH, MASK_SIZE, IMG_SIZE, VERBOSE, MIN_AREA, CROP_SPACE, VERSION
+from transforms import MASK_TRANSFORM, MASK_TRANSFORM_AUGMENT
 from utils import convert_json_compat, restore_prints, suppress_prints, timer
 
 sys.path.append(SAM2_PATH)
@@ -115,7 +116,7 @@ class SAM2Segmenter:
         self.annotations = {
             'coco_id': [img['id'] for img in annotations['images']],
             'image_file': [img['file_name'] for img in annotations['images']],
-            'image_id': [img['extra']['name'].split('.')[0].split('_')[0] for img in annotations['images']],
+            'image_id': [img['file_name'] for img in annotations['images']],
             'annotations': []
         }
 
@@ -139,25 +140,25 @@ class SAM2Segmenter:
             })
         print(f"Parsed {len(self.annotations['annotations'])} annotations from {annotation_path}.")
 
-    @staticmethod
-    def gen_params(param_dic, random=False, seed=42, n_samples=50):
+#    @staticmethod
+#    def gen_params(param_dic, random=False, seed=42, n_samples=50):
        
-        keys = param_dic.keys()
-        param_grid = [dict(zip(keys, values)) for values in itertools.product(*param_dic.values())]
+#        keys = param_dic.keys()
+#       param_grid = [dict(zip(keys, values)) for values in itertools.product(*param_dic.values())]
 
         #For randomized hyperparameter grid search
-        if random:
-            np.random.seed(seed)
-            param_grid = np.random.choice(param_grid, n_samples, replace=False).tolist()
-
-        return param_grid
+#        if random:
+#            np.random.seed(seed)
+#            param_grid = np.random.choice(param_grid, n_samples, replace=False).tolist()
+#
+#        return param_grid
 
     def load_image(self, img_path=None, img: Image = None, whiteBalance=True, redBoost=1, clipLimit=2.0, tileGridSize=8, gamma=0.8):
         if img_path is not None:
             image = cv2.imread(img_path)
             self.image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         else:
-            self.image = np.array(img)
+           self.image = np.array(img)
         self.image = self.resize_image(self.image, self.img_size)
 
         return self.augment(self.image, whiteBalance=whiteBalance, redBoost=redBoost, clipLimit=clipLimit, tileGridSize=tileGridSize, gamma=gamma)
@@ -171,7 +172,7 @@ class SAM2Segmenter:
         if self.annotations is None:
             raise ValueError("No annotations loaded. Please load annotations first using `parse_annotations` method.")
 
-        img_id = os.path.basename(img_path).split('.')[0].split('_')[0]
+        img_id = os.path.basename(img_path)
         annotation_loc = np.argwhere(np.array(self.annotations['image_id']) == img_id)
         if len(annotation_loc) < 1:
             print(f"No annotations found for image ID {img_id}.")
@@ -576,7 +577,6 @@ class SAM2Segmenter:
             color_mask = np.concatenate([np.random.random(3), [0.5]])
             img[m] = color_mask
             if borders:
-                import cv2
                 contours, _ = cv2.findContours(m.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
                 # Try to smooth contours
                 contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
@@ -696,7 +696,8 @@ class CoralSegmenter(SAM2Segmenter):
                 redBoost=None,
                 gamma=None,
                 overlap=None,
-                min_area=None, mask_size=None, coral_thresh=0.5, init_models=True, verbose=True):
+                min_area=None, mask_size=None, coral_thresh=0.5, init_models=True, verbose=True,
+                filter_tta: int = 0, filter_tta_seed: int | None = None):
         
         min_area = min_area or MIN_AREA
         mask_size = mask_size or MASK_SIZE
@@ -722,7 +723,11 @@ class CoralSegmenter(SAM2Segmenter):
             coral_masks_X = np.stack([mask['segmentation'] for mask in all_coral_masks])
 
             #NOTE: Computation time for this operation may vary depending on the size of the coral filter ensembler used (e.g. how many submodules there are)
-            coral_classes_proba = self.coral_filter.predict(coral_masks_X, image, mask_size=mask_size)
+            coral_classes_proba = self.coral_filter.predict(
+                coral_masks_X, image, mask_size=mask_size,
+                transform_fn=MASK_TRANSFORM,
+                tta=filter_tta, tta_transform=MASK_TRANSFORM_AUGMENT, tta_seed=filter_tta_seed
+            )
             coral_classes_p = np.abs(np.max(coral_classes_proba, axis=1)-1e-3)
             weights = coral_classes_p #1/(1-coral_classes_p)
             coral_classes_preds = np.argmax(coral_classes_proba, axis=1)

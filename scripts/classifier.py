@@ -40,21 +40,21 @@ class CoralClassifier(nn.Module):
         self.backbone.fc = self._create_fc(self.backbone.fc.in_features, dim=dim)
 
     @staticmethod
-    def _create_fc(in_feautres, dim=1):
+    def _create_fc(in_features, dim=1):
 
         return nn.Sequential(
 
-            nn.Linear(in_feautres, 512),
+            nn.Linear(in_features, 512),
             nn.ReLU(inplace=True),
-            nn.Dropout(p=0.7),
+            nn.Dropout(p=0.5),
 
             nn.Linear(512, 256),
             nn.ReLU(inplace=True),
-            nn.Dropout(p=0.6),
+            nn.Dropout(p=0.4),
 
             nn.Linear(256, 128),
             nn.ReLU(inplace=True),
-            nn.Dropout(p=0.5),
+            nn.Dropout(p=0.3),
 
             nn.Linear(128, dim)
         )
@@ -74,34 +74,6 @@ class EnsembleOptimizer(torch.nn.Module):
         norm_weights = self.weights / self.weights.sum(dim=1, keepdim=True)  # shape: [M, K]
         z = torch.einsum('nmk,mk->nk', X, norm_weights)  # Weighted sum
         return z
-
-class EnsembleOptimizer(torch.nn.Module):
-    def __init__(self, M, K):
-        super().__init__()
-        self.M = M
-        self.K = K
-
-        #Class-wise weights W: [M, K]
-        self.weights = torch.nn.Parameter(torch.ones(M, K) / K)
-
-        #Model-level weights alpha: [M]
-        self.alpha = torch.nn.Parameter(torch.ones(M))
-
-    def forward(self, X):  #X: [N, M, K]
-        #Normalize W_m across K
-        W_normalized = self.weights / self.weights.sum(dim=1, keepdim=True)  # [M, K]
-
-        #Normalize alpha across M
-        alpha_normalized = torch.softmax(self.alpha, dim=0)  # [M]
-        alpha_expanded = alpha_normalized.unsqueeze(1)  # [M, 1]
-
-        #Compute combined weight: T_{m,k} = alpha_m * W_{m,k}
-        combined_weights = alpha_expanded * W_normalized  # [M, K]
-
-        #Weighted sum over models: z_i = sum_m sum_k T_{m,k} * z_i^{(m,k)}
-        z = torch.einsum('nmk,mk->nk', X, combined_weights)  # [N, K]
-        return z
-
 
 #This code comes from https://github.com/itakurah/Focal-loss-PyTorch/blob/main/focal_loss.py
 class FocalLoss(nn.Module):

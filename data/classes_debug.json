@@ -1,0 +1,10 @@
+{
+    "branching_acropora:healthy": 0,
+    "finger_acropora:healthy": 1,
+    "finger_porites:healthy": 2,
+    "knob_porites:healthy": 3,
+    "mounding_:healthy": 4,
+    "noncoral": 5,
+    "oddball:healthy": 6,
+    "pocillopora_:healthy": 7
+}

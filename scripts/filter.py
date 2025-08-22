@@ -25,7 +25,7 @@ from data import MaskLoader
 from classifier import CoralClassifier, EnsembleOptimizer, FocalLoss, create_loss_fn
 
 from config import (
-    VERBOSE, MASK_SIZE, FILTER_MODELS_DIR, CLASSES_FILE, PATIENCE, RES, NEG_WEIGHT
+    VERBOSE, MASK_SIZE, FILTER_MODELS_DIR, CLASSES_FILE, PATIENCE, RES, NEG_WEIGHT, UPSAMPLE, TOP_KS, FILTER_TTA, FILTER_TTA_SEED
 )
 from transforms import MASK_TRANSFORM, MASK_TRANSFORM_AUGMENT
 
@@ -68,37 +68,52 @@ class CoralFilter:
         self.lr = lr
         self.weight_decay = weight_decay
 
-        self.dataset = dataset or MaskLoader()
-        if self.dataset.classes:
-            self.classes = self.dataset.classes
+        self.base_ds = dataset if isinstance(dataset, MaskLoader) else None
+
+        if self.base_ds is not None:
+            self.classes = self.base_ds.classes
         else:
             with open(CLASSES_FILE, 'r') as f:
                 self.classes = json.load(f)
         self.noncoral_class = self.classes['noncoral']
 
         if train:
+            print(type(self.base_ds))
             train_idx, val_idx = train_test_split(
-                np.arange(len(dataset)),
+                np.arange(len(self.base_ds)),
                 test_size = split,
-                stratify = self.dataset.labels.numpy(),
+                stratify = self.base_ds.labels.numpy(),
                 #It is imperative that each of these submodels are trained on a bootstrapped distribution
                 #of the *same* training data to appropriately explore the sampling distribution 
                 random_state=seed
             )
+
+            print(set(train_idx).isdisjoint(val_idx)) #debug
             #array([45836, 65131, 20203, ..., 54551, 34767, 67438], shape=(51338,))
             #array([50013, 25265, 32029, ..., 29129, 63953, 48043], shape=(22003,))
 
             if bootstrap:
                 train_idx = np.random.choice(train_idx, size=len(train_idx), replace=True)
 
-            train_set = Subset(self.dataset, train_idx)
-            val_set = Subset(self.dataset, val_idx)
+            print(len(train_idx), len(val_idx))
 
-            self.train_loader = DataLoader(train_set, batch_size=self.batch_size)
-            self.test_loader = DataLoader(val_set, batch_size=self.batch_size)
+            self.train_set = self.base_ds.slice(train_idx)
+            self.val_set = self.base_ds.slice(val_idx)
+
+            print(self.train_set, self.val_set)
+
+            self.train_set._oversample(class_cap=int(UPSAMPLE*(1-split)))
+            self.train_set.transform_fn = MASK_TRANSFORM_AUGMENT
+            self.val_set.transform_fn = MASK_TRANSFORM
+            self.val_set.resample()
+
+            print(set(self.train_set).isdisjoint(self.val_set)) #debug
+
+            self.train_loader = DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True)
+            self.test_loader = DataLoader(self.val_set, batch_size=self.batch_size)
 
             if VERBOSE:
-                print(f"Stratified the data into {len(train_idx)} observations for training and {len(val_idx)} observations for validation.")
+                print(f"Stratified the data into {len(self.train_set)} observations for training and {len(self.val_set)} observations for validation.")
 
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=weight_decay)
 
@@ -122,11 +137,11 @@ class CoralFilter:
         for epoch in range(self.epochs):
 
             print(f"Epoch {epoch+1}\n-------------------------------")
-            self.dataset.resample()
+            self.train_set.resample()
             epoch_loss = 0.0
 
             correct = 0
-            total = 0
+            total = 0 
 
             self.model.train()
 
@@ -157,7 +172,7 @@ class CoralFilter:
             accuracy = correct / total if total > 0 else 0
             print(f"Epoch {epoch+1}, Avg. Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}")
             
-            val_loss = self.test()
+            val_loss = self.test(tta=FILTER_TTA, tta_seed=FILTER_TTA_SEED)
 
             #Early stopping mechanism
             if val_loss < best_val_loss:
@@ -173,8 +188,26 @@ class CoralFilter:
                 break
 
         self.model.load_state_dict(best_model)
+
+    def _top_k_accuracy(self, logits: torch.Tensor, targets: torch.Tensor, ks=(1,)): 
+        #if logits.ndim != 2:
+        #    raise ValueError
+        #if targets.ndim != 2:
+        #    raise ValueError
+        y = targets.argmax(dim=1)
+        maxk = max(ks) if ks else 1
+        maxk = min(maxk, logits.shape[1])
+        # indices of top-k classes per sample: [N, maxk]
+        _, topk = torch.topk(logits, k=maxk, dim=1)
+        # Compare true class to any of top-k
+        correct = topk.eq(y.unsqueeze(1))          # [N, maxk]
+        out = {}
+        for k in ks:
+            k = max(1, min(int(k), logits.shape[1]))
+            out[k] = correct[:, :k].any(dim=1).float().mean().item()
+        return out
     
-    def test(self):
+    def test(self, tta: int = 0, tta_transform=None, tta_seed: int | None = None, topk = TOP_KS):
 
         """
         Evaluates the model on the validation set.
@@ -184,69 +217,191 @@ class CoralFilter:
 
         Also prints accuracy and recall statistics. Recall is defined as:
             TP / (TP + FN) for identifying coral / noncoral objects
+
+        If `tta > 0`, performs test-time augmentation by re-augmenting from
+        `val_set.raw_data` `tta` times, averaging logits across passes.
         """
 
         self.model.eval()
+
+        if tta and tta > 0:
+            tta_transform = tta_transform or MASK_TRANSFORM_AUGMENT
+
+            N = len(self.val_set)
+            y = self.val_set.labels.to(self.device)
+            K = y.shape[1]
+
+            logits_sum = torch.zeros(N, K, device=self.device)
+
+            ctx = None
+            if tta_seed is not None:
+                try:
+                    ctx = torch.random.fork_rng()
+                    ctx.__enter__()
+                except Exception:
+                    ctx = None
+                torch.manual_seed(int(tta_seed))
+
+            with torch.no_grad():
+                for _ in range(int(tta)):
+                    Xr = self.val_set.augment(self.val_set.raw_data, tta_transform)
+                    for i in range(0, N, self.batch_size):
+                        xb = Xr[i:i+self.batch_size].to(self.device)
+                        logits_sum[i:i+len(xb)] += self.model(xb).squeeze(1)
+
+            if ctx is not None:
+                ctx.__exit__(None, None, None)
+
+            logits = logits_sum / float(tta)
+            probs  = torch.softmax(logits, dim=1)
+
+            # If loss is CrossEntropyLoss, feed class indices; otherwise feed one-hot
+            if isinstance(self.loss_fn, nn.CrossEntropyLoss):
+                loss = self.loss_fn(logits, y.argmax(dim=1)).item()
+            else:
+                loss = self.loss_fn(logits, y.float()).item()
+
+            preds   = probs.argmax(dim=1)
+            y_class = y.argmax(dim=1)
+            correct = (preds == y_class).sum().item()
+            total   = len(y_class)
+
+            tp = ((preds != self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
+            fn = ((preds == self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
+            fp = ((preds != self.noncoral_class) & (y_class == self.noncoral_class)).sum().item()
+
+            accuracy  = correct / total if total else 0
+            recall    = tp / (tp + fn) if (tp + fn) else 0
+            precision = tp / (tp + fp) if (tp + fp) else 0
+
+            ks = tuple(k for k in topk if 1 <= k <= K)
+            topk_res = self._top_k_accuracy(logits, y.float(), ks=ks)
+            tk = " | ".join([f"Top-{k}: {topk_res[k]:.4f}" for k in ks])              
+
+            # Collapse check histogram (debug)
+            pred_hist = Counter(preds.detach().cpu().tolist())
+            total_preds = sum(pred_hist.values())
+            if total_preds > 0:
+                try:
+                    idx2name = {v: k for k, v in self.classes.items()}
+                except Exception:
+                    idx2name = {}
+                top_id, top_count = pred_hist.most_common(1)[0]
+                top_name = idx2name.get(int(top_id), str(top_id))
+                top_share = 100.0 * top_count / total_preds
+                noncoral_share = 100.0 * pred_hist.get(int(self.noncoral_class), 0) / total_preds
+                top5 = []
+                for cid, cnt in pred_hist.most_common(5):
+                    cname = idx2name.get(int(cid), str(cid))
+                    top5.append(f"({cid},{cname},{cnt})")
+                print("Prediction histogram (top 5): " + ", ".join(top5))
+                print(f"Most frequent predicted class: {top_name} (id={int(top_id)}) — {top_share:.1f}% of preds")
+                print(f"% predicted noncoral: {noncoral_share:.1f}%\n")
+
+            tk_str = " | ".join([f"Top-{k}: {topk_res[k]:.4f}" for k in ks])
+            print(f"TTA={tta} | Avg loss: {loss:.6f} | Accuracy (Top-1): {accuracy:.4f}" + f" | {tk_str}" if topk else "" + f"| Precision: {precision:.4f} | Recall: {recall:.4f}\n")
+            return loss
+
         num_batches = len(self.test_loader)
         test_loss = 0
-
-        correct = 0
-        total = 0
-
-        true_positive = 0
-        false_negative = 0
-        false_positive = 0
-
+        correct = total = 0
+        tp = fn = fp = 0
         with torch.no_grad():
-            for batch, (X, y) in enumerate(self.test_loader):
+            pred_hist = Counter()
+            all_logits, all_targets = [], []
+            for _, (X, y) in enumerate(self.test_loader):
                 X, y = X.to(self.device), y.to(self.device)
-                pred = self.model(X).squeeze(1)
+                pred = self.model(X).squeeze(1)                 # [B, K]
+                all_logits.append(pred.detach().cpu())
+                all_targets.append(y.detach().cpu())
                 test_loss += self.loss_fn(pred, y.float()).item()
-
-                y_class = torch.argmax(y, dim=1)
-                probs = torch.softmax(pred, dim=1)           # shape: [B, K]
-                preds = torch.argmax(probs, dim=1)           # shape: [B]
+                y_class = y.argmax(dim=1)
+                probs   = torch.softmax(pred, dim=1)
+                preds   = probs.argmax(dim=1)
                 correct += (preds == y_class).sum().item()
-                total += y.size(0)
-
-                true_positive += ((preds != self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
-                false_negative += ((preds == self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
-                false_positive += ((preds != self.noncoral_class) & (y_class == self.noncoral_class)).sum().item()
-
+                total   += y.size(0)
+                pred_hist.update(preds.detach().cpu().tolist())
+                tp += ((preds != self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
+                fn += ((preds == self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
+                fp += ((preds != self.noncoral_class) & (y_class == self.noncoral_class)).sum().item()
         test_loss /= num_batches
-        accuracy = correct / total if total > 0 else 0
-        recall = true_positive / (true_positive + false_negative) if (true_positive + false_negative) > 0 else 0
-        precision = true_positive / (true_positive + false_positive) if (true_positive + false_positive) > 0 else 0
-
-        print(f"Test Error:\n"
-            f"Avg loss: {test_loss:.6f} | "
-            f"Accuracy: {accuracy:.4f} | "
-            f"Precision: {precision:.4f} | "
-            f"Recall: {recall:.4f}\n")
-        
+        accuracy  = correct / total if total else 0
+        recall    = tp / (tp + fn) if (tp + fn) else 0
+        precision = tp / (tp + fp) if (tp + fp) else 0
+        # Top-k
+        if all_logits:
+            L = torch.cat(all_logits, dim=0)                    # [N, K]
+            T = torch.cat(all_targets, dim=0)                   # [N, K]
+            ks = tuple(k for k in topk if 1 <= k <= L.shape[1])
+            topk_res = self._top_k_accuracy(L, T, ks=ks)
+            tk_str = " | ".join([f"Top-{k}: {topk_res[k]:.4f}" for k in ks])
+        else:
+            topk_res, tk_str = {}, ""
+        print(f"Test Error:\nAvg loss: {test_loss:.6f} | Accuracy (Top-1): {accuracy:.4f} | {tk_str} | Precision: {precision:.4f} | Recall: {recall:.4f}")
+        total_preds = sum(pred_hist.values())
+        if total_preds > 0:
+            try:
+                idx2name = {v: k for k, v in self.classes.items()}
+            except Exception:
+                idx2name = {}
+            top_id, top_count = pred_hist.most_common(1)[0]
+            top_name = idx2name.get(int(top_id), str(top_id))
+            top_share = 100.0 * top_count / total_preds
+            noncoral_share = 100.0 * pred_hist.get(int(self.noncoral_class), 0) / total_preds
+            top5 = []
+            for cid, cnt in pred_hist.most_common(5):
+                cname = idx2name.get(int(cid), str(cid))
+                top5.append(f"({cid},{cname},{cnt})")
+            print("Prediction histogram (top 5): " + ", ".join(top5))
+            print(f"Most frequent predicted class: {top_name} (id={int(top_id)}) — {top_share:.1f}% of preds")
+            print(f"% predicted noncoral: {noncoral_share:.1f}%\n")
         return test_loss
 
-    def predict(self, masks, img = None, img_path: str = None, mask_size=None, transform_fn=None):
-        
+    def predict(self, masks, img=None, img_path: str = None, mask_size=None, transform_fn=None, tta: int = 0, tta_transform=None, tta_seed: int | None = None):     
+           
         mask_size = mask_size or MASK_SIZE
         transform_fn = transform_fn or MASK_TRANSFORM_AUGMENT
+        tta_transform = tta_transform or MASK_TRANSFORM_AUGMENT
 
         if img_path is not None:
             img = decode_image(img_path)
 
-        masks = torch.tensor(masks)
-        X = torch.stack([
-            self.dataset.extract(img, mask, mask_size, tf=transform_fn).to(self.device)
-            for mask in masks
-        ])
+        extract_function = (self.base_ds.extract if self.base_ds is not None
+                   else MaskLoader.extract)
 
+        masks = torch.tensor(masks)
         self.model.eval()
         with torch.no_grad():
-            pred = self.model(X)
+            if tta and tta > 0:
+                # Optional reproducibility for TTA views
+                ctx = None
+                if tta_seed is not None:
+                    try:
+                        ctx = torch.random.fork_rng()
+                        ctx.__enter__()
+                    except Exception:
+                        ctx = None
+                    torch.manual_seed(int(tta_seed))
+
+                logits_sum = None
+                for _ in range(int(tta)):
+                    Xr = torch.stack([
+                        extract_function(img, mask, mask_size, tf=tta_transform).to(self.device)
+                        for mask in masks
+                    ])
+                    pr = self.model(Xr)
+                    logits_sum = pr if logits_sum is None else (logits_sum + pr)
+
+                if ctx is not None:
+                    ctx.__exit__(None, None, None)
+                pred = logits_sum / float(tta)
+            else:
+                X = torch.stack([
+                    extract_function(img, mask, mask_size, tf=transform_fn).to(self.device)
+                    for mask in masks
+                ])
+                pred = self.model(X)
         return pred.cpu().numpy()
-    
-    def save_model(self, path):
-        torch.save(self.model.state_dict(), path)
 
     def load_model(self, path):
         state_dict = torch.load(path, map_location=self.device, weights_only=True)
@@ -264,7 +419,10 @@ class CoralFilterEnsembler:
 
         self.mask_data = None
         if self.base_dataset is not None: #e.g. if we're training the model
-            self.mask_data = MaskLoader(load_file=self.base_dataset, balance=True)
+            self.mask_data = MaskLoader(load_file=self.base_dataset, balance=False)
+            print("unique raw crops:", len(torch.unique(
+                    self.mask_data.raw_data.view(len(self.mask_data),-1), dim=0)))
+            print("total entries:", len(self.mask_data))
             #self.mask_loader = DataLoader(self.mask_data, batch_size=batch_size)
 
             self.classes = self.mask_data.classes
@@ -272,7 +430,7 @@ class CoralFilterEnsembler:
                 json.dump(self.classes, f, indent=4)
 
             #Preliminary estimates suggest that our images contain 30-40% coral cover, on average
-            #However, the data that will the models will be trained with is inflated with negative labels to increase sample size (resulting in 80:20 ratio of negative to positive labels)
+            #However, the data that the models will be trained with is inflated with negative labels to increase sample size (resulting in 80:20 ratio of negative to positive labels)
             #Note that the inflated data *is* representative of the data that will ultimately be fed into the trained models because of *where* (the stage at which) the model is implemented
             
             #labels = self.mask_data.labels.numpy()
@@ -289,7 +447,7 @@ class CoralFilterEnsembler:
         else:
             with open(CLASSES_FILE, 'r') as f:
                 self.classes = json.load(f)
-
+   
         self.noncoral_class = self.classes["noncoral"]
 
         self.base_model = base_model or CoralClassifier
@@ -306,10 +464,11 @@ class CoralFilterEnsembler:
         self.ensemble_model = EnsembleOptimizer(self.m, self.k)
 
     def train(self, ensemble_split=0.1):
+        weights = torch.ones(self.k, device=self.device)
         for i in range(self.m):
             print(f"Creating model {i+1}/{self.m}")
             model_i = CoralFilter(self.base_model(pretrained=True, dim=self.k, res=RES), self.mask_data, self.device, 
-                                  create_loss_fn(use_focal=False), #Generic CCE loss for each submodule
+                                  create_loss_fn(weight=weights, use_focal=False), #Generic CCE loss for each submodule
                                   batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=True, seed=self.seed, bootstrap=True)
             model_i.train(patience=PATIENCE)
             self.models.append(model_i)
@@ -318,12 +477,18 @@ class CoralFilterEnsembler:
 
     def train_ensemble(self, ensemble_split=0.1):
 
+        #Ensuring we don't attempt to stratify a class with only one instance
+        y_all = np.argmax(self.mask_data.labels.numpy(), axis=1)
+        counts = np.bincount(y_all)
+        min_count = counts[counts > 0].min() if counts.size else 0
+        can_stratify = (min_count >= 2) and (np.unique(y_all).size >= 2)
+
         #Now we weight each model that gives the best OOS ensemble performance
         self.mask_data.resample()
         _, idx = train_test_split(
             np.arange(len(self.mask_data)),
             test_size=self.split,
-            stratify=np.argmax(self.mask_data.labels.numpy(), axis=1),
+            stratify=(y_all if can_stratify else None),
             random_state=self.seed
         )
 
@@ -342,10 +507,13 @@ class CoralFilterEnsembler:
                     pred = filter_model.model(X).squeeze(1)
                     logits[batch * self.batch_size : batch * self.batch_size + len(X), m, :] = pred.cpu().numpy()
 
+        classes2, counts2 = np.unique(y_true, return_counts=True)
+        can_strat = (classes2.size >= 2) and (counts2.min() >= 2)
+
         ensemble_train_idx, ensemble_test_idx = train_test_split(
             np.arange(len(idx)),
             test_size=ensemble_split,
-            stratify=y_true
+            stratify=(y_true if can_strat else None)
         )
 
         self.X_train, self.y_train = torch.tensor(logits[ensemble_train_idx], dtype=torch.float32).to(self.device), self.mask_data.labels[idx][ensemble_train_idx].float().to(self.device)
@@ -438,7 +606,7 @@ class CoralFilterEnsembler:
 
         return X_test, y_test
 
-    def validate(self):
+    def validate(self, topk=(1, 3, 5)):
 
         correct = 0
         total = 0
@@ -460,41 +628,67 @@ class CoralFilterEnsembler:
         precision = true_positive / (true_positive + false_positive) if (true_positive + false_positive) > 0 else 0
         accuracy = correct/total
 
-        print(f"Ensemble model trained with out-of-sample accuracy: {accuracy:.4f}, Recall: {recall:.4f}, Precision: {precision:.4f}")
+        ks = tuple(k for k in topk if 1 <= k <= probs.shape[1])
+        topk_res = {}
+        if ks:
+            topk_res = CoralFilter._top_k_accuracy(self, y_hat, self.y_test.float(), ks=ks)
+ 
+        tk_str = " | ".join([f"Top-{k}: {topk_res[k]:.4f}" for k in ks]) if ks else ""
+        print(f"Ensemble OOS — Accuracy (Top-1): {accuracy:.4f} | {tk_str} | Recall: {recall:.4f} | Precision: {precision:.4f}")
+
+        idx2name = {v: k for k, v in self.classes.items()}
+        class_names = [idx2name[i] for i in range(len(idx2name))]
+        per_class = _per_class_metrics(y_hat, self.y_test.float(), class_names)
+
+        return {
+            "accuracy": float(accuracy),
+            "recall": float(recall),
+            "precision": float(precision),
+            "k_classes": int(self.k),
+            "m_submodels": int(self.m),
+            "noncoral_class_index": int(self.noncoral_class),
+            "topk": {int(k): float(v) for k, v in topk_res.items()},
+            "per_class": _per_class_metrics(y_hat, self.y_test.float(), class_names)
+        }
 
     def save_models(self, dir=None):
         dir = dir or FILTER_MODELS_DIR
         if not os.path.exists(dir):
             os.makedirs(dir)
         for i, model in tqdm(enumerate(self.models), desc="Saving models"):
-            model.save_model(os.path.join(dir, f"model_{i+1}.pth"))
+           torch.save(model.model.state_dict(), os.path.join(dir, f"model_{i+1}.pth"))
         torch.save(self.ensemble_model.state_dict(), os.path.join(dir, "ensemble.pth"))
 
     def load_models(self, dir=None, dim=None):
         dim = dim or self.k
         dir = dir or FILTER_MODELS_DIR
-        model_files = glob(os.path.join(dir, "model_*.pth"))
+        model_files = sorted(glob(os.path.join(dir, "model_*.pth")))
         if len(model_files) < 1:
             raise ValueError(f"No model files found in {dir}. Please train models first.")
         else:
             self.models = []
             for i in tqdm(range(self.m), desc="Loading models"):
                 model_file = model_files[i]
-                model = CoralFilter(self.base_model(pretrained=True, dim=dim, res=RES), self.mask_data, self.device,
+                model = CoralFilter(self.base_model(pretrained=True, dim=dim, res=RES), self.mask_data if isinstance(self.mask_data, MaskLoader) else None, self.device,
                                     batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=False)
                 model.load_model(model_file)
                 self.models.append(model)
-        state_dict = torch.load(os.path.join(dir, "ensemble.pth"), map_location=self.device, weights_only=True)
-        self.ensemble_model.load_state_dict(state_dict)
-        self.ensemble_model = self.ensemble_model.to(self.device)
-        self.ensemble_model.eval()
+        ens_path = os.path.join(dir, "ensemble.pth")
+        if os.path.exists(ens_path):
+            state_dict = torch.load(os.path.join(dir, "ensemble.pth"), map_location=self.device, weights_only=True)
+            self.ensemble_model.load_state_dict(state_dict)
+            self.ensemble_model = self.ensemble_model.to(self.device)
+            self.ensemble_model.eval()
 
-    def predict(self, masks, img=None, img_path: str = None, mask_size=None):
+    def predict(self, masks, img=None, img_path: str = None, mask_size=None, transform_fn=None, tta: int = 0, tta_transform=None, tta_seed: int | None = None):
         mask_size = mask_size or MASK_SIZE
         logits = np.zeros((len(masks), self.m, self.k), dtype=np.float32)
         for m in tqdm(range(self.m), desc="Classifying"):
             model = self.models[m]
-            logits[:,m,:] = model.predict(masks, img, img_path, mask_size)
+            logits[:, m, :] = model.predict(
+                masks, img, img_path, mask_size,
+                transform_fn=transform_fn, tta=tta, tta_transform=tta_transform, tta_seed=tta_seed
+            )
         
         with torch.no_grad():
             ensemble_logits = self.ensemble_model(torch.tensor(logits).to(self.device))
@@ -506,3 +700,24 @@ class CoralFilterEnsembler:
     def get_class_names(labels, class_dict):
         index_to_class = {v: k for k, v in class_dict.items()}
         return [index_to_class[label] for label in labels]
+    
+def _per_class_metrics(logits: torch.Tensor, targets: torch.Tensor, class_names: list):
+    """
+    Compute per-class accuracy, precision, recall from logits and one-hot targets.
+    Returns: dict[class_name] = {"accuracy": float, "precision": float, "recall": float}
+    """
+    import numpy as np
+    y_true = targets.argmax(dim=1).cpu().numpy()
+    y_pred = logits.argmax(dim=1).cpu().numpy()
+    K = logits.shape[1]
+    report = {}
+    for c in range(K):
+        tp = np.sum((y_pred == c) & (y_true == c))
+        fn = np.sum((y_pred != c) & (y_true == c))
+        tn = np.sum((y_pred != c) & (y_true != c))
+        fp = np.sum((y_pred == c) & (y_true != c))
+        acc = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0.0
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        report[class_names[c]] = {"accuracy": float(acc), "precision": float(prec), "recall": float(rec)}
+    return report

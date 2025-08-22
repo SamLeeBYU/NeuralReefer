@@ -81,12 +81,12 @@ class MaskLoader(Dataset):
             label_indices = torch.argmax(labels, dim=1).tolist()
             class_counts = Counter(label_indices)
 
-            #Filter out classes with less than 20 observations
-            valid_class_indices = {cls for cls, count in class_counts.items() if count >= 20}
+            #Filter out classes with less than 20 observations (DEBUG 2)
+            valid_class_indices = {cls for cls, count in class_counts.items() if count >= 2}
             keep_mask = [i for i, idx in enumerate(label_indices) if idx in valid_class_indices]
 
             self.labels = labels[keep_mask]
-            self.raw_data = [raw_data[i] for i in keep_mask]
+            self.raw_data = raw_data[keep_mask]
 
             old_to_new = {
                 old_idx: new_idx for new_idx, old_idx in enumerate(sorted(valid_class_indices))
@@ -112,8 +112,25 @@ class MaskLoader(Dataset):
         if reindex:
             self.save_data(MASK_DATA_PATH)
 
-    def _oversample(self, class_cap=1000):
+    def slice(self, idx, balance=False):
+        subset = MaskLoader(transform_fn=self.transform_fn, mask_size=self.mask_size, balance=balance)
+        tensor = torch.as_tensor(idx)
+        subset.raw_data = self.raw_data.index_select(0, tensor).clone()
+        subset.img_data = self.img_data.index_select(0, tensor).clone()
+        subset.labels = self.labels.index_select(0, tensor).clone()
+        subset.classes = self.classes
+        return subset
+
+    def _oversample(self, class_cap=UPSAMPLE, exclude=None):
         print(f"Applying oversampling to balance minority classes (cap = {class_cap})...")
+
+        exclude = set(exclude or [])
+        skip_idx = set()
+        for name, idx in self.classes.items():
+            for ex in exclude:
+                if name == ex or name.startswith(ex + ":"):
+                    skip_idx.add(idx)
+                    break
 
         labels_np = torch.argmax(self.labels, dim=1).numpy()
         class_counts = np.bincount(labels_np)
@@ -122,10 +139,14 @@ class MaskLoader(Dataset):
 
         index_to_class = {v: k for k, v in self.classes.items()}
         for class_idx, count in enumerate(class_counts):
+            if class_idx in skip_idx:
+                continue
             if count >= class_cap:
                 continue
 
             indices = np.where(labels_np == class_idx)[0]
+            if indices.size == 0:
+                continue
             needed = class_cap - count
 
             sampled_idx = np.random.choice(indices, size=needed, replace=True)
@@ -209,7 +230,7 @@ class MaskLoader(Dataset):
         gt_masks_set = []
         genus_labels_set = []
         bleached_labels_set = []
-
+ 
         for img_path in tqdm(images, desc="Loading Ground Truth Masks"):
             genus_labels, bleach_labels, gt_masks = self.segmentation_model.get_gt_masks(img_path)
 
@@ -288,8 +309,9 @@ class MaskLoader(Dataset):
         y_max, x_max = coords.max(dim=0).values
 
         #crop to mask
-        crop = segmentation[:, y_min:y_max, x_min:x_max]
-
+        crop = segmentation[:, y_min:y_max+1, x_min:x_max+1]
+        if 0 in crop.shape:
+            import pdb; pdb.set_trace()  
         #make square by padding to center
         #padding parameter (=5) is relative to the scale of the image (1024x1024) in this case
         h, w = crop.shape[1:]
