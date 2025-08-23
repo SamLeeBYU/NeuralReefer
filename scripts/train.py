@@ -13,7 +13,7 @@ Run as a standalone script or import train
 
 from config import (
     VERSION, TRAIN_DIR, EXT,
-    SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, 
+    SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH,
     TUNE_SEGMENTER, N_CALLS, K, VERBOSE,
     CREATE_MASK_DATASET, MASK_SIZE, TOLERANCE, MASK_DATA_PATH,
 
@@ -34,7 +34,7 @@ import pandas as pd
 import random
 import numpy as np
 
-from skopt.space import Real, Integer, Categorical  
+from skopt.space import Real, Integer, Categorical
 from sklearn.model_selection import train_test_split
 
 def load_data(file_path):
@@ -72,20 +72,20 @@ def hold_out(images, val_size=VAL_SIZE, seed=42):
     )
     return train_images, val_images
 
-def train(tune_segmenter: bool = TUNE_SEGMENTER, 
+def train(tune_segmenter: bool = TUNE_SEGMENTER,
           create_mask_dataset: bool = CREATE_MASK_DATASET,
           train_coral_filter: bool = TRAIN_CORAL_FILTER,
           eval: bool = EVAL
           ):
 
     images = [os.path.join(TRAIN_DIR, file) for file in os.listdir(TRAIN_DIR) if file.endswith(EXT)]
-    
+
     if VAL_SIZE > 0:
         train_images, test_images = hold_out(images)
     else:
         train_images = test_images = images
 
-    device = torch.device("cuda")
+    device = None #torch.device("cuda")
 
     checkpoint_path=SAM2_CHECKPOINT_PATH
     config_path=SAM2_CONFIG_PATH
@@ -101,7 +101,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             annotation_path = f"{TRAIN_DIR}/_annotations.coco.json",
 
             device = device
-    
+
         )
 
         # ========================
@@ -158,9 +158,9 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             device = device
         )
 
-        maskloader = MaskLoader(train_images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE)
+        maskloader = MaskLoader(test_images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE)
         maskloader.save_data(MASK_DATA_PATH)
-            
+
     # Train the model to filter out non-coral masks
     coral_filter = CoralFilterEnsembler(
         base_dataset=MASK_DATA_PATH if train_coral_filter else None,
@@ -170,6 +170,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
 
     if train_coral_filter:
         coral_filter.train()
+        coral_filter.train_ensemble()
         coral_filter.validate()
         coral_filter.save_models(FILTER_MODELS_DIR)
 
@@ -181,7 +182,8 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         coral_filter.load_models(FILTER_MODELS_DIR)
 
         coral_segmenter = CoralSegmenter(config_path, checkpoint_path, coral_filter, annotation_path = f"{TRAIN_DIR}/_annotations.coco.json", device=device)
-        #coral_segmenter.summary_stats(images)
+        #coral_segmenter.summary_stats(train_images)
+        #coral_segmenter.summary_stats(test_images, output_file="data/test_data_summary.json")
         save_dir = Path(f"figures/segmentation.v.{VERSION}")
         save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -211,10 +213,10 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             pred_labels = coral_segmenter.coral_filter.get_class_names(labels, coral_segmenter.coral_filter.classes)
             genus_labels, bleach_labels, gt_masks = coral_segmenter.get_gt_masks(image)
             if genus_labels is not None:
-                ml_labels = genus_labels + np.where(bleach_labels == 1, ":bleached", ":healthy")
+                ml_labels = np.char.add(genus_labels, np.where(bleach_labels == 1, ":bleached", ":healthy"))
             else:
                 ml_labels = np.array([])
-            
+
             gt_masks = [segmentation for j, segmentation in enumerate(gt_masks) if genus_labels[j] != "noncoral"]
             gt_labels = [ml_labels[j] for j in range(len(ml_labels)) if genus_labels[j] != "noncoral"]
 
@@ -248,7 +250,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
                 class_name = coral_segmenter.coral_filter.get_class_names([k], coral_segmenter.coral_filter.classes)[0]
                 if not class_name.endswith(":healthy"):
                     continue
-            
+
                 cc_true_healthy.append(coral_segmenter.coral_cover([
                     gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j] == class_name
                 ], cs=coral_segmenter.crop_space))
@@ -270,9 +272,9 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
                 coral_segmenter.show_masks(masks, coral_segmenter.color_map, pred_labels, show=False, save_path=save_path_pred)
                 coral_segmenter.show_masks(gt_masks, coral_segmenter.color_map, gt_labels, show=False, save_path=save_path_true)
                 #coral_segmenter.show_masks_side_by_side(gt_masks, masks, figsize=FIG_SIZE, save_path=save_path)
-            
+
         print("-" * 78)
-        
+
         predictions = {
             'image': test_images,
             'accuracy': pixel_accuracies,
@@ -297,7 +299,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         predictions_df = pd.DataFrame(predictions)
         metadata = load_data(METADATA)
         metadata['image_id'] = metadata['filename'].str.split('.').str[0]
-        
+
         predictions_data = pd.merge(predictions_df, metadata, on='image_id', how='left')
         pd.DataFrame(predictions_data).to_csv(f"data/performance/coral_segmenter_predictions.v.{VERSION}.csv", index=False)
 
