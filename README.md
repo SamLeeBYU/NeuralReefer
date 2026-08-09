@@ -130,9 +130,9 @@ python main.py --mode visualize
 
 ## 📞 Contact
 
-- **Sam Lee** — Brigham Young University, WHOI  
-- 📧 samlee.byu@gmail.com  
-- 📨 slee039@byu.edu | 🌊 sam.lee@whoi.edu  
+- **Sam Lee** — University of Arizona
+(Previous affiliation: Brigham Young University, WHOI)
+- 📨 samlee@arizona.edu
 
 ---
 
