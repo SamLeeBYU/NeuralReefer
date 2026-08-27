@@ -6,46 +6,76 @@ This repository implements an end-to-end deep learning pipeline for analyzing to
 
 ## 🔧 Installation
 
-To set up Neural Reefer from scratch, follow these steps:
+Neural Reefer requires **Python 3.9+**. All commands below (and all commands in this README) must be run from the **repository root** — paths in `scripts/config.py` are relative to it, and will fail with `FileNotFoundError` if run from inside `scripts/`.
 
-1. **Clone the SAM2 repository** (required for segmentation):
+1. **Clone this repository** and `cd` into it:
    ```bash
-   git clone https://github.com/facebookresearch/sam2.git
+   git clone https://github.com/your-repo/NeuralReefer.git
+   cd NeuralReefer
    ```
 
-2. **Update `config.py`** to reflect your local SAM2 path:
+2. **Create a virtual environment** (recommended) and install the Python dependencies:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate      # on Windows: .venv\Scripts\activate
+
+   pip install -r requirements.txt
+   ```
+   This installs `torch`, `torchvision`, `opencv-python`, `numpy`, `pandas`, `scikit-learn`,
+   `scikit-optimize`, `Pillow`, `matplotlib`, `seaborn`, `tqdm`, `supervision`, `shapely`,
+   `geopandas`, and `contextily`.
+   - If you have an NVIDIA GPU, install a CUDA-enabled build of `torch`/`torchvision` **first**
+     by following the selector at [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/),
+     then run `pip install -r requirements.txt` — the CPU wheel installed by that command will
+     be skipped since a compatible version is already present. Otherwise the default CPU-only
+     build is installed automatically and inference/training will just run on CPU (slower, but
+     functional).
+
+3. **Clone and install SAM2** (the segmentation backbone — a separate repository, not on PyPI):
+   ```bash
+   git clone https://github.com/facebookresearch/sam2.git
+   cd sam2 && pip install -e . && cd ..
+   ```
+   Then download the pretrained checkpoint (from inside the `sam2` directory):
+   ```bash
+   cd sam2/checkpoints && ./download_ckpts.sh && cd ../..
+   ```
+
+4. **Point `scripts/config.py` at your local SAM2 checkout** — edit these two lines to the
+   full path where you cloned it in step 3:
    ```python
    SAM2_PATH = "/path/to/sam2"  # Replace with the full path
    SAM2_CHECKPOINT_PATH = f"{SAM2_PATH}/checkpoints/sam2.1_hiera_large.pt"
    ```
 
-3. **Enable training mode** in `config.py` by setting:
+5. **Run inference** — pretrained coral filter models, class labels, and tuned SAM2
+   hyperparameters are already committed under `models/` and `data/segmentation/`, so no
+   training is required to get started. Try it on the bundled example image:
+   ```bash
+   python scripts/example.py
+   ```
+   or point it at your own folder of images:
+   ```bash
+   python scripts/main.py --mode inference --image_dir path/to/images
+   ```
+   Results are written to `<image_dir>/inference/inference_statistics.csv` (per-image coral
+   cover / bleaching / genus breakdown), with predicted mask overlays saved alongside as
+   `<image_dir>/inference/<image_id>.png` and predicted masks in COCO format at
+   `<image_dir>/annotations_coco.json`. For the bundled example this is
+   `data/examples/inference/inference_statistics.csv`.
+
+6. **(Optional) Retrain the pipeline on your own annotated data**, once your COCO
+   annotations + images are placed in `data/train` (see `TRAIN_DIR`/`EXT` in `config.py`).
+   Enable the stages you need in `config.py`:
    ```python
    TUNE_SEGMENTER = True
    CREATE_MASK_DATASET = True
    TRAIN_CORAL_FILTER = True
    ```
-
-4. **Run training pipeline** from root directory:
+   then run:
    ```bash
    python scripts/main.py --mode train
    ```
-
-5. **Run inference** on a folder of images (after training):
-   ```bash
-   python scripts/main.py --mode inference
-   ```
-
-Neural Reefer requires Python 3.9+ and PyTorch (>= 2.0). First, clone the repository:
-
-```bash
-git clone https://github.com/your-repo/NeuralReefer.git
-cd NeuralReefer
-```
-
-Install dependencies (preferably in a new virtual environment):
-
-If using CUDA, ensure compatible versions of PyTorch and torchvision are installed. Pretrained SAM2 weights must be downloaded separately from the [official repository](https://github.com/facebookresearch/sam2).
 
 ---
 
@@ -108,22 +138,30 @@ Final coral cover is computed by summing pixel areas of masks classified as cora
 
 ## 🚀 Usage Examples
 
+All commands are run from the repository root.
+
+### Run inference on the bundled example image
+
+```bash
+python scripts/example.py
+```
+
 ### Run inference on a folder of images
 
 ```bash
-python main.py --mode eval --image_dir path/to/images
+python scripts/main.py --mode inference --image_dir path/to/images
 ```
 
 ### Train full pipeline (segmentation + filtering + classification)
 
 ```bash
-python main.py --mode train
+python scripts/main.py --mode train
 ```
 
 ### Visualize performance metrics
 
 ```bash
-python main.py --mode visualize
+python scripts/main.py --mode visualize --version <VERSION>
 ```
 
 ---

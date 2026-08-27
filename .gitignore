@@ -1,3 +1,9 @@
+# Personal configuration file
+scripts/config.py
+
+# Miscellaneous
+scripts/ensemble_aggregation_sim.R
+
 ### Large Files ###
 
 # Data outputs
@@ -6,6 +12,8 @@ data/test/
 data/train/*.jpg
 data/versions/
 !data/README.md
+data/examples/annotations_coco.json
+data/examples/inference
 
 scripts/coralnet.py
 
@@ -241,3 +249,4 @@ $RECYCLE.BIN/
 
 #R
 .Rhistory
+.RData
