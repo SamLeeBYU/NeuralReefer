@@ -90,3 +90,8 @@ SAVE_IMG = False
 FIG_SIZE = (16, 9)
 #Data from yellowfin to be merged with prediction metric data
 METADATA = "data/metadata/Day3_Photo_MetaData_sr4.xlsx"
+#Minimum distance (in meters, matching the metadata's UTM coordinates) required between any
+#train image and any test image. Images closer than this to an image in the opposite split
+#are folded into the train set so the train/test independence assumption isn't violated by
+#overlapping/adjacent photos. Set to None to disable this check.
+SPATIAL_RADIUS = 2.0

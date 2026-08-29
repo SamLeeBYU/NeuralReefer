@@ -1,9 +1,177 @@
 library(tidyverse)
 library(readxl)
+library(dbscan)
+library(igraph)
 
 metadata = readxl::read_xlsx("data/metadata/Day3_Photo_MetaData_sr4.xlsx")
 
 eval.dat = read_csv("data/performance/coral_segmenter_predictions.v.1.0.csv")
+
+# --- Train/Test Independence Check ---------------------------------------
+# eval.dat above was scored over every image in data/train (train ∪ test,
+# 552 rows), so before trusting any "test set" statistic we need to know
+# which images are actually test images, and whether any test image sits
+# within SPATIAL_RADIUS_M of a train image. Nearby/overlapping photos have
+# correlated coral cover, so a test image within that radius of a train
+# image violates the train/test independence assumption (see
+# scripts/train.py::enforce_spatial_independence, which now prevents this
+# for splits built going forward -- this section audits/cleans up eval runs,
+# like this v1.0 one, that predate that check).
+#
+# Set EXCLUDE_INDEPENDENCE_VIOLATIONS <- TRUE to drop the violating images
+# from eval.dat before any stats/plots below are computed.
+
+SPATIAL_RADIUS_M <- 2  # meters; matches config.SPATIAL_RADIUS
+EXCLUDE_INDEPENDENCE_VIOLATIONS <- FALSE
+
+split.dat <- read_csv("data/performance/train_test_split_metadata.csv", show_col_types = FALSE) %>%
+  select(image_id, split) %>%
+  distinct(image_id, .keep_all = TRUE)
+
+eval.dat <- eval.dat %>% left_join(split.dat, by = "image_id")
+
+coords <- eval.dat %>% select(NorthPhoto_UTM, EastPhoto_UTM)
+has_coords <- complete.cases(coords) & !is.na(eval.dat$split)
+
+eval.dat$violates_independence <- FALSE
+
+# Fixed-radius nearest-neighbor search via a kd-tree (dbscan::frNN) instead
+# of an O(N^2) all-pairs distance matrix, then connected components
+# (igraph) over the resulting "within radius" graph: if a test image is
+# only indirectly close to a train image (through a chain of other nearby
+# photos), it still leaks, so any cluster touching both splits should be
+# treated as a violation, not just directly-adjacent pairs.
+coord_mat <- as.matrix(coords[has_coords, ])
+nn <- dbscan::frNN(coord_mat, eps = SPATIAL_RADIUS_M)
+
+edges <- do.call(rbind, lapply(seq_along(nn$id), function(i) {
+  nbrs <- nn$id[[i]]
+  nbrs <- nbrs[nbrs > i]  # de-duplicate: keep each edge once
+  if (length(nbrs) == 0) return(NULL)
+  cbind(i, nbrs)
+}))
+
+g <- igraph::graph_from_data_frame(
+  d = as.data.frame(edges),
+  vertices = data.frame(name = seq_len(nrow(coord_mat))),
+  directed = FALSE
+)
+cluster_id <- igraph::components(g)$membership
+
+split_sub <- eval.dat$split[has_coords]
+violating_local <- logical(length(cluster_id))
+for (cl in unique(cluster_id)) {
+  members <- which(cluster_id == cl)
+  if (length(members) < 2) next
+  splits_in_cluster <- unique(split_sub[members])
+  if ("train" %in% splits_in_cluster && "test" %in% splits_in_cluster) {
+    test_members <- members[split_sub[members] == "test"]
+    violating_local[test_members] <- TRUE
+  }
+}
+eval.dat$violates_independence[has_coords] <- violating_local
+
+violating_ids <- eval.dat %>% filter(violates_independence) %>% pull(image_id)
+n_missing_coords <- sum(!has_coords & eval.dat$split == "test", na.rm = TRUE)
+
+cat(length(violating_ids), "test image(s) violate the", SPATIAL_RADIUS_M, "m independence assumption:\n")
+print(violating_ids)
+if (n_missing_coords > 0) {
+  cat(n_missing_coords, "test image(s) lack usable GPS coordinates and could not be checked.\n")
+}
+# ---------------------------------------------------------------------------
+
+# --- IoU / F1 / Dice for Live Coral Cover, derived from the performance CSV ---
+# The CSV only stores per-image scalar `accuracy`, `coral_cover` (true), and
+# `coral_cover_pred` -- not the underlying pixel masks -- but for a single
+# foreground class (coral vs. non-coral) those three numbers fully
+# determine the 2x2 confusion matrix, so IoU/F1/Dice can be recovered with
+# no mask data at all:
+#
+#   P = coral_cover      = (TP + FN) / N   (true coral proportion)
+#   Q = coral_cover_pred = (TP + FP) / N   (predicted coral proportion)
+#   A = accuracy         = (TP + TN) / N   (pixel agreement, both classes)
+#   1 = TP + FP + FN + TN                  (proportions of N sum to 1)
+#
+# Solving the linear system for the intersection (TP) gives:
+#   TP = (A + P + Q - 1) / 2
+# from which IoU = TP / (P + Q - TP) and Dice = F1 = 2*TP / (P + Q)
+# (Dice and F1 are the same quantity for a single foreground class).
+#
+# One wrinkle: `accuracy` (Segmenter.accuracy) is computed over the full
+# 1024x1024 frame, while `coral_cover`/`coral_cover_pred` (Segmenter.coral_cover)
+# exclude the fixed CROP_SPACE border pixels from their denominator. That
+# border is never coral in either mask, so it contributes only true
+# negatives -- it's subtracted out below to put accuracy on the same
+# (cropped) denominator as P and Q before solving.
+
+CROP_SPACE_PX <- 7130
+IMG_AREA_PX <- 1024 * 1024
+
+eval.dat <- eval.dat %>%
+  mutate(
+    accuracy_cropped = (accuracy * IMG_AREA_PX - CROP_SPACE_PX) / (IMG_AREA_PX - CROP_SPACE_PX),
+    tp_lcc = (accuracy_cropped + coral_cover + coral_cover_pred - 1) / 2,
+    fp_lcc = coral_cover_pred - tp_lcc,
+    fn_lcc = coral_cover - tp_lcc,
+    tn_lcc = 1 - coral_cover - coral_cover_pred + tp_lcc,
+    iou_lcc = tp_lcc / (coral_cover + coral_cover_pred - tp_lcc),
+    dice_lcc = 2 * tp_lcc / (coral_cover + coral_cover_pred),
+    f1_lcc = dice_lcc  # equivalent to Dice for a single foreground class
+  )
+
+n_invalid_lcc <- sum(eval.dat$tp_lcc < 0 | eval.dat$fp_lcc < 0 |
+                        eval.dat$fn_lcc < 0 | eval.dat$tn_lcc < 0, na.rm = TRUE)
+if (n_invalid_lcc > 0) {
+  cat(n_invalid_lcc, "image(s) produced a negative confusion-matrix component",
+      "(accuracy/coverage figures were mutually inconsistent for that row);",
+      "IoU/Dice/F1 for those rows should be treated with caution.\n")
+}
+
+cat("Live Coral Cover segmentation quality (derived from accuracy + coverage):\n")
+print(
+  eval.dat %>%
+    summarise(
+      mean_iou = mean(iou_lcc, na.rm = TRUE),
+      median_iou = median(iou_lcc, na.rm = TRUE),
+      mean_dice_f1 = mean(dice_lcc, na.rm = TRUE),
+      median_dice_f1 = median(dice_lcc, na.rm = TRUE)
+    )
+)
+# ---------------------------------------------------------------------------
+
+# Report the effect of removing the independence violators, now including
+# the derived IoU/Dice/F1 metrics alongside the existing accuracy/bias ones.
+summarize_independence_effect <- function(df, label) {
+  df$big_mask <- (abs(df$accuracy - df$coral_cover) <= 0.1) & df$coral_cover < 0.1
+  out <- tibble(
+    set = label,
+    n = nrow(df),
+    prop_big_mask = mean(df$big_mask, na.rm = TRUE),
+    mean_accuracy = mean(df$accuracy, na.rm = TRUE),
+    median_accuracy_adj = median(df$accuracy[df$big_mask == 0], na.rm = TRUE),
+    mean_cover_bias = mean(df$coral_cover_pred - df$coral_cover, na.rm = TRUE),
+    mean_bleached_bias = mean(df$pct_bleached_pred - df$pct_bleached_true, na.rm = TRUE)
+  )
+  if ("iou_lcc" %in% colnames(df)) {
+    out$mean_iou_lcc <- mean(df$iou_lcc, na.rm = TRUE)
+    out$mean_dice_f1_lcc <- mean(df$dice_lcc, na.rm = TRUE)
+  }
+  out
+}
+
+independence_effect <- bind_rows(
+  summarize_independence_effect(eval.dat, "all images (current)"),
+  summarize_independence_effect(eval.dat %>% filter(!violates_independence), "all images, violators removed"),
+  summarize_independence_effect(eval.dat %>% filter(split == "test"), "test split only"),
+  summarize_independence_effect(eval.dat %>% filter(split == "test", !violates_independence), "test split, violators removed")
+)
+print(independence_effect)
+
+if (EXCLUDE_INDEPENDENCE_VIOLATIONS) {
+  eval.dat <- eval.dat %>% filter(!violates_independence)
+}
+# ---------------------------------------------------------------------------
 
 # --- Custom GGplot Theme -------------------------------------------------
 
@@ -128,6 +296,30 @@ p2 <- ggplot(eval.dat, aes(x = accuracy)) +
 
 ggsave(filename = file.path(save_dir, "accuracy_histogram.png"),
        plot = p2, width = plot_width, height = plot_height, dpi = dpi_val)
+
+# ---- Plot 3: Histogram of LCC IoU ----
+p3 <- ggplot(eval.dat, aes(x = iou_lcc)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  geom_vline(aes(xintercept = median(iou_lcc, na.rm = TRUE)),
+             color = "black", linetype = "dashed") +
+  labs(x = "IoU", y = "Count", title = "Histogram of Live Coral Cover IoU") +
+  guides(fill = "none", color = "none") +
+  nf.theme
+
+ggsave(filename = file.path(save_dir, "lcc_iou_histogram.png"),
+       plot = p3, width = plot_width, height = plot_height, dpi = dpi_val)
+
+# ---- Plot 4: Histogram of LCC Dice / F1 ----
+p4 <- ggplot(eval.dat, aes(x = dice_lcc)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  geom_vline(aes(xintercept = median(dice_lcc, na.rm = TRUE)),
+             color = "black", linetype = "dashed") +
+  labs(x = "Dice / F1", y = "Count", title = "Histogram of Live Coral Cover Dice/F1") +
+  guides(fill = "none", color = "none") +
+  nf.theme
+
+ggsave(filename = file.path(save_dir, "lcc_dice_f1_histogram.png"),
+       plot = p4, width = plot_width, height = plot_height, dpi = dpi_val)
 
 # ---- Class-wise Density and Bias Plots ----
 unique_classes <- unique(coral.cover$class)

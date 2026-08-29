@@ -19,7 +19,7 @@ from config import (
 
     TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR, PATIENCE,
 
-    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE
+    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE, SPATIAL_RADIUS, IMG_SIZE
 )
 
 import os
@@ -33,9 +33,131 @@ from pathlib import Path
 import pandas as pd
 import random
 import numpy as np
+from collections import defaultdict
+from scipy.spatial import cKDTree
 
 from skopt.space import Real, Integer, Categorical
 from sklearn.model_selection import train_test_split
+
+get_image_id = lambda path: path.split("\\")[-1].split("_")[0]
+
+def union_mask(mask_list, shape=IMG_SIZE):
+    """OR's together a list of boolean masks into a single mask of `shape`."""
+    if len(mask_list) == 0:
+        return np.zeros(shape, dtype=bool)
+    return np.any(np.stack(mask_list), axis=0)
+
+def pixel_iou_dice(true_mask, pred_mask):
+    """
+    Pixel-level IoU/Dice(=F1) between two boolean masks, computed directly
+    from the raw TP/FP/FN pixel counts (no area normalization needed, since
+    it cancels out of the ratio) -- unlike the overall LCC metrics in
+    data_viz.R, which had to be reconstructed algebraically from aggregate
+    accuracy/coverage numbers because the per-mask arrays weren't available
+    there. Here we have the actual masks, so this is exact.
+
+    Returns:
+        tp, fp, fn (int), iou, dice (float; 1.0 when both masks are empty)
+    """
+    tp = int(np.logical_and(true_mask, pred_mask).sum())
+    fp = int(np.logical_and(~true_mask, pred_mask).sum())
+    fn = int(np.logical_and(true_mask, ~pred_mask).sum())
+    iou = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 1.0
+    dice = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
+    return tp, fp, fn, iou, dice
+
+def enforce_spatial_independence(train_images, test_images, metadata, radius=SPATIAL_RADIUS):
+    """
+    Removes spatial leakage between the train/test split: any image within
+    `radius` meters of an image in the opposite split is reassigned to the
+    train set, since the coral cover in overlapping/adjacent photos is
+    correlated and would otherwise violate the train/test independence
+    assumption.
+
+    Rather than the naive O(N^2) all-pairs distance check, this builds a
+    KD-tree over the (projected, meter-scale) UTM coordinates and uses
+    `cKDTree.query_pairs`, which only examines spatially nearby candidates
+    (O(N log N) for images spread out over a reef transect, versus
+    N*(N-1)/2 for brute force). Images are then grouped into connected
+    "overlap clusters" (via union-find over the close pairs) rather than
+    checked pairwise one at a time: if any single image in a cluster were
+    left in test while another stayed in train, they'd still leak into each
+    other transitively, so any cluster touching both splits is folded
+    entirely into train.
+
+    Args:
+        train_images (list): training image paths.
+        test_images (list): test image paths.
+        metadata (pd.DataFrame): must contain 'image_id', 'NorthPhoto_UTM',
+            'EastPhoto_UTM' columns.
+        radius (float): exclusion radius in meters. If None, returns the
+            split unchanged.
+
+    Returns:
+        train_images (list), test_images (list): the adjusted split.
+    """
+    if radius is None:
+        return train_images, test_images
+
+    all_images = train_images + test_images
+    image_ids = [get_image_id(path) for path in all_images]
+    split = np.array(["train"] * len(train_images) + ["test"] * len(test_images))
+
+    coords = (
+        metadata.set_index("image_id")[["NorthPhoto_UTM", "EastPhoto_UTM"]]
+        .reindex(image_ids)
+        .to_numpy(dtype=float)
+    )
+
+    valid = ~np.isnan(coords).any(axis=1)
+    n_missing = int((~valid).sum())
+    if n_missing and VERBOSE:
+        print(f"Warning: {n_missing} image(s) have no usable GPS coordinates in metadata "
+              f"and cannot be spatially checked; leaving their split assignment unchanged.")
+
+    valid_idx = np.where(valid)[0]
+    tree = cKDTree(coords[valid_idx])
+    close_pairs = tree.query_pairs(r=radius)  # indices are local to valid_idx
+
+    parent = list(range(len(valid_idx)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(i, j):
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            parent[ri] = rj
+
+    for i, j in close_pairs:
+        union(i, j)
+
+    clusters = defaultdict(list)
+    for local_i in range(len(valid_idx)):
+        clusters[find(local_i)].append(valid_idx[local_i])
+
+    new_split = split.copy()
+    n_reassigned = 0
+    for members in clusters.values():
+        if len(members) < 2:
+            continue
+        if len(set(new_split[members])) > 1:
+            for m in members:
+                if new_split[m] != "train":
+                    new_split[m] = "train"
+                    n_reassigned += 1
+
+    if n_reassigned and VERBOSE:
+        print(f"Reassigned {n_reassigned} test image(s) to train: within {radius}m of a "
+              f"spatially connected train image.")
+
+    new_train = [all_images[i] for i in range(len(all_images)) if new_split[i] == "train"]
+    new_test = [all_images[i] for i in range(len(all_images)) if new_split[i] == "test"]
+
+    return new_train, new_test
 
 def load_data(file_path):
     ext = os.path.splitext(file_path)[1].lower()
@@ -55,14 +177,22 @@ def load_data(file_path):
     else:
         raise ValueError(f"Unsupported file extension: {ext}")
 
-def hold_out(images, val_size=VAL_SIZE, seed=42):
+def hold_out(images, val_size=VAL_SIZE, seed=42, metadata_path=METADATA, radius=SPATIAL_RADIUS):
     """
-    Splits a list of images into training and validation sets.
+    Splits a list of images into training and validation sets, then, if
+    `metadata_path` and `radius` are set, folds any test image within
+    `radius` meters of a train image back into train so the split doesn't
+    violate the train/test independence assumption (see
+    `enforce_spatial_independence`).
 
     Args:
         images (list): List of image paths.
         val_size (float): Proportion of images to reserve for validation.
         seed (int): Random seed for reproducibility.
+        metadata_path (str): Path to the metadata file with GPS coordinates.
+            Set to None to skip spatial conditioning.
+        radius (float): Exclusion radius in meters. Set to None to skip
+            spatial conditioning.
 
     Returns:
         train_images (list), val_images (list)
@@ -70,6 +200,14 @@ def hold_out(images, val_size=VAL_SIZE, seed=42):
     train_images, val_images = train_test_split(
         images, test_size=val_size, random_state=seed, shuffle=True
     )
+
+    if metadata_path is not None and radius is not None:
+        metadata = load_data(metadata_path)
+        metadata["image_id"] = metadata["filename"].str.split(".").str[0]
+        train_images, val_images = enforce_spatial_independence(
+            train_images, val_images, metadata, radius=radius
+        )
+
     return train_images, val_images
 
 def train(tune_segmenter: bool = TUNE_SEGMENTER,
@@ -205,6 +343,10 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         coral_cover_class_true = np.zeros((len(test_images), len(genus_names)))
         coral_cover_class_pred = np.zeros((len(test_images), len(genus_names)))
 
+        # Per-taxonomy pixel-level IoU/Dice(=F1), computed directly from the
+        # actual predicted/ground-truth masks (see pixel_iou_dice)
+        taxonomy_records = []
+
         print(f"{'Idx':>4} | {'Acc':>6} | {'Avg Acc':>8} | {'True CC':>8} | {'Avg True CC':>12} | {'Pred CC':>8} | {'Avg Pred CC':>12}")
         print("-" * 78)
 
@@ -262,6 +404,36 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             coral_cover_class_healthy_true[i, :] = cc_true_healthy
             coral_cover_class_healthy_pred[i, :] = cc_pred_healthy
 
+            # Per-taxonomy IoU/Dice (see pixel_iou_dice / union_mask above).
+            image_id = get_image_id(image)
+
+            def add_taxonomy_row(taxonomy, true_mask, pred_mask):
+                tp, fp, fn, iou, dice = pixel_iou_dice(true_mask, pred_mask)
+                taxonomy_records.append({
+                    "image": image, "image_id": image_id, "taxonomy": taxonomy,
+                    "tp_px": tp, "fp_px": fp, "fn_px": fn, "iou": iou, "dice_f1": dice
+                })
+
+            add_taxonomy_row("all_coral", union_mask(gt_masks), union_mask(masks))
+
+            add_taxonomy_row(
+                "bleached",
+                union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].endswith(":bleached")]),
+                union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j].endswith(":bleached")]),
+            )
+
+            for genus in genus_names:
+                add_taxonomy_row(
+                    genus,
+                    union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].startswith(genus + ":")]),
+                    union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(genus + ":")]),
+                )
+                add_taxonomy_row(
+                    f"{genus}:healthy",
+                    union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j] == f"{genus}:healthy"]),
+                    union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j] == f"{genus}:healthy"]),
+                )
+
             print(f"{i:>4} | {pixel_accuracies[i]:6.3f} | {pixel_accuracies[:i+1].mean():8.3f} "
                 f"| {coral_cover_true[i]:8.3f} | {coral_cover_true[:i+1].mean():12.3f} "
                 f"| {coral_cover_pred[i]:8.3f} | {coral_cover_pred[:i+1].mean():12.3f}")
@@ -294,7 +466,6 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             predictions[f'cover_healthy_true__{genus}'] = coral_cover_class_healthy_true[:, g]
             predictions[f'cover_healthy_pred__{genus}'] = coral_cover_class_healthy_pred[:, g]
 
-        get_image_id = lambda path: path.split("\\")[-1].split("_")[0]
         predictions['image_id'] = [get_image_id(img) for img in test_images]
         predictions_df = pd.DataFrame(predictions)
         metadata = load_data(METADATA)
@@ -302,6 +473,9 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
 
         predictions_data = pd.merge(predictions_df, metadata, on='image_id', how='left')
         pd.DataFrame(predictions_data).to_csv(f"data/performance/coral_segmenter_predictions.v.{VERSION}.csv", index=False)
+
+        taxonomy_df = pd.DataFrame(taxonomy_records)
+        taxonomy_df.to_csv(f"data/performance/coral_segmenter_taxonomy_metrics.v.{VERSION}.csv", index=False)
 
 if __name__ == "__main__":
     train(eval=True)
