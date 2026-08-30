@@ -23,6 +23,7 @@ models/filter_res34_5/
 modesl/filter_5/
 models/classifiers/
 !models/README.md
+!models/filter_res34_5_v18/ensemble.npz
 
 # Figures and plots
 !figures/README.md
@@ -31,7 +32,6 @@ figures/
 
 # Segmentation masks or cache
 *.npy
-*.npz
 *.pt
 *.pth
 
