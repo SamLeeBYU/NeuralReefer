@@ -27,7 +27,7 @@ from data import MaskLoader
 from classifier import CoralClassifier, EMEnsembleOptimizer, FocalLoss, create_loss_fn
 
 from config import (
-    VERBOSE, MASK_SIZE, FILTER_MODELS_DIR, CLASSES_FILE, PATIENCE, RES, NEG_WEIGHT
+    VERBOSE, MASK_SIZE, FILTER_MODELS_DIR, CLASSES_FILE, PATIENCE, RES, NEG_WEIGHT, ENSEMBLE_SPLIT
 )
 from transforms import MASK_TRANSFORM, MASK_TRANSFORM_AUGMENT
 
@@ -256,6 +256,77 @@ class CoralFilter:
         self.model = self.model.to(self.device)
         self.model.eval()
 
+def extract_submodel_logits(models, dataset, k, batch_size=128, cache_path=None,
+                             use_cache=True, verbose=True):
+    """
+    Forward-passes every model in `models` over the ENTIRE `dataset` (all
+    samples, not a subset), using the deterministic MASK_TRANSFORM (not the
+    training-time MASK_TRANSFORM_AUGMENT) -- sets dataset.transform_fn and
+    calls dataset.resample() internally -- so re-running this reproduces the
+    same numbers every time.
+
+    This is the expensive step shared by CoralFilterEnsembler.train_ensemble()
+    and scripts/generate_filter_reports.py: each only needs a different
+    index-based slice of the SAME full-dataset logits (train_ensemble()'s
+    30% ensemble pool is a strict subset of generate_filter_reports.py's
+    70/30 split of the whole dataset), not a different computation. Both
+    can point cache_path at the same file, so only the first of the two to
+    run ever pays this cost.
+
+    Args:
+        models (list[CoralFilter]): the trained, frozen submodels.
+        dataset (MaskLoader): full dataset to evaluate every model over.
+        k (int): number of classes (for cache shape validation).
+        cache_path (str, optional): .npz path to cache/reuse the result at.
+            None disables caching.
+        use_cache (bool): set False to force recomputation even if a cache
+            file exists (e.g. after retraining a submodel).
+
+    Returns:
+        logits ([N, len(models), k] float32), y_true ([N] int),
+        N = len(dataset).
+    """
+    cache_hit = cache_path is not None and use_cache and os.path.exists(cache_path)
+
+    if cache_hit:
+        if verbose:
+            print(f"Loading cached submodel logits from {cache_path}")
+        cached = np.load(cache_path)
+        logits, y_true = cached["logits"], cached["y_true"]
+        expected_shape = (len(dataset), len(models), k)
+        if logits.shape != expected_shape:
+            raise ValueError(
+                f"Cached logits at {cache_path} have shape {logits.shape} but expected "
+                f"{expected_shape} for this dataset/model set -- the cache is stale "
+                f"(e.g. from a different dataset or submodels). Delete it or pass use_cache=False."
+            )
+        return logits, y_true
+
+    dataset.transform_fn = MASK_TRANSFORM
+    dataset.resample()
+
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    N = len(dataset)
+    logits = np.zeros((N, len(models), k), dtype=np.float32)
+    y_true = np.argmax(dataset.labels.numpy(), axis=1)
+
+    for m, filter_model in tqdm(enumerate(models), "Evaluating models", total=len(models)):
+        filter_model.model.eval()
+        with torch.no_grad():
+            for batch, (X, y) in enumerate(loader):
+                X = X.to(filter_model.device)
+                pred = filter_model.model(X).squeeze(1)
+                logits[batch * batch_size: batch * batch_size + len(X), m, :] = pred.cpu().numpy()
+
+    if cache_path is not None:
+        os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
+        np.savez(cache_path, logits=logits, y_true=y_true)
+        if verbose:
+            print(f"Cached submodel logits to {cache_path}")
+
+    return logits, y_true
+
+
 class CoralFilterEnsembler:
 
     def __init__(self, base_dataset: str, base_model = None, device=None, m=5, epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.1, seed=42):
@@ -318,36 +389,42 @@ class CoralFilterEnsembler:
 
         self.train_ensemble(ensemble_split)
 
-    def train_ensemble(self, ensemble_split=0.1):
-
+    def train_ensemble(self, ensemble_split=ENSEMBLE_SPLIT, cache_path=None, use_cache=True):
+        """
+        Args:
+            ensemble_split (float): fraction of the ensemble-data pool held
+                out as the ensemble's own out-of-sample set.
+            cache_path (str, optional): passed through to
+                extract_submodel_logits() -- caches the FULL-dataset submodel
+                logits (not just this ensembler's 30% pool), so the same
+                cache file can also be reused by scripts/generate_filter_reports.py,
+                which needs the complementary 70% too. None (the default)
+                disables caching entirely -- unchanged behavior for existing
+                callers.
+            use_cache (bool): set False to force recomputation even if a
+                cache file exists at cache_path (e.g. after retraining a
+                submodel, when the cache would be stale).
+        """
         #Now we weight each model that gives the best OOS ensemble performance
-        self.mask_data.resample()
-        _, idx = train_test_split(
-            np.arange(len(self.mask_data)),
-            test_size=self.split,
-            stratify=np.argmax(self.mask_data.labels.numpy(), axis=1),
-            random_state=self.seed
+        full_logits, full_y_true = extract_submodel_logits(
+            self.models, self.mask_data, self.k,
+            batch_size=self.batch_size, cache_path=cache_path, use_cache=use_cache,
         )
 
         #We need to train the ensembler on the set of data that the submodels have not seen to maintain independence between models
-        ensemble_dat = Subset(self.mask_data, idx)
-        ensemble_loader = DataLoader(ensemble_dat, batch_size=self.batch_size, shuffle=False)
-
-        logits = np.zeros((len(ensemble_dat), self.m, self.k), dtype=np.float32)
-        y_true = np.argmax(self.mask_data.labels[idx].numpy(), axis=1)
-
-        for m, filter_model in tqdm(enumerate(self.models), "Evaluating models"):
-            filter_model.model.eval()
-            with torch.no_grad():
-                for batch, (X, y) in enumerate(ensemble_loader):
-                    X, y = X.to(self.device), y.to(self.device)
-                    pred = filter_model.model(X).squeeze(1)
-                    logits[batch * self.batch_size : batch * self.batch_size + len(X), m, :] = pred.cpu().numpy()
+        _, idx = train_test_split(
+            np.arange(len(self.mask_data)),
+            test_size=self.split,
+            stratify=full_y_true,
+            random_state=self.seed
+        )
+        logits, y_true = full_logits[idx], full_y_true[idx]
 
         ensemble_train_idx, ensemble_test_idx = train_test_split(
             np.arange(len(idx)),
             test_size=ensemble_split,
-            stratify=y_true
+            stratify=y_true,
+            random_state=self.seed
         )
 
         # From here on the ensemble-combination stage is pure NumPy: the M

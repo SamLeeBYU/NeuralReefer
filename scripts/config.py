@@ -70,6 +70,10 @@ LR = 5*1e-5
 WEIGHT_DECAY = 5*1e-6
 #How much of the data is perserved to train the ensembler
 SPLIT = 0.3
+#Of that ensembler pool, how much is further held out as the ensemble's own
+#out-of-sample set (never used to fit alpha/W, only to validate the fit --
+#see CoralFilterEnsembler.train_ensemble and scripts/generate_filter_reports.py)
+ENSEMBLE_SPLIT = 0.1
 #Patience parameter for early stopping
 PATIENCE = 5
 #Class Dictionary File

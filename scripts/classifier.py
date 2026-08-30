@@ -105,66 +105,113 @@ class EMEnsembleOptimizer:
         tilde_p = self._reweighted_probs(probs)
         return (self.alpha[None, :, None] * tilde_p).sum(axis=1)
 
-    def fit(self, logits, y_idx, nu, max_iter=200, mm_iters=5, tol=1e-6,
-            pseudocount=1e-3, seed=42, verbose=True):
+    def _fit_single(self, probs, y_idx, nu_i, seed, max_iter, mm_iters, tol,
+                     pseudocount, verbose, label=""):
         """
-        Fits alpha and W by EM. `logits` ([N, M, K], raw submodel outputs)
-        and `y_idx` ([N], integer true class per sample) are fixed
-        throughout -- only alpha and W are estimated. `nu` ([K]) is the
-        per-class loss weight (nu_{y_i} in the derivation, e.g. down-
-        weighting the noncoral class).
+        One EM trajectory from a fresh random init. `probs` ([N, M, K],
+        already softmaxed) and `nu_i` ([N], nu_{y_i} per sample) are fixed
+        throughout. Returns (alpha, weights, final_ll) -- operates on local
+        arrays, not self.alpha/self.weights, so multiple calls from fit()
+        don't interfere with each other.
         """
         rng = np.random.default_rng(seed)
-        N, M, K = logits.shape
-        probs = self._softmax(logits)  # p_i^(m): fixed for the whole fit
+        N, M, K = probs.shape
 
-        # Small random perturbation off uniform, not an exact symmetric
-        # start -- a perfectly symmetric init is itself a (poor) stationary
-        # point of this non-convex problem.
-        self.alpha = np.full(M, 1.0 / M)
-        self.weights = np.exp(0.01 * rng.standard_normal((M, K)))
+        # Randomized init, not an exact symmetric start (a perfectly
+        # uniform init is itself a stationary point of this non-convex
+        # problem). The scale here (std=1 in log-space, so weights span
+        # roughly two orders of magnitude) is deliberately wide -- a tight
+        # perturbation would put every "random" start within a hair of
+        # uniform, defeating the purpose of multi-start: different starts
+        # need to actually land in different basins for fit()'s
+        # keep-the-best-of-n_starts selection to matter.
+        alpha = np.full(M, 1.0 / M)
+        weights = np.exp(rng.standard_normal((M, K)))
 
-        nu_i = nu[y_idx]  # [N], nu_{y_i}
         idx_n, idx_m = np.arange(N)[:, None], np.arange(M)[None, :]
         prev_ll = -np.inf
+        ll = -np.inf
 
         for it in range(max_iter):
             # ---- E-step: responsibilities (Eq. 4) ----
-            tilde_p = self._reweighted_probs(probs)                    # [N, M, K]
-            tilde_p_y = tilde_p[idx_n, idx_m, y_idx[:, None]]           # [N, M] = tilde_p_{i,y_i}^{(m)}
-            joint = self.alpha[None, :] * tilde_p_y                     # [N, M]
-            p_hat_y = joint.sum(axis=1, keepdims=True)                  # [N, 1] = p_hat_{i,y_i}
-            gamma = joint / p_hat_y                                      # [N, M]
+            weighted = weights[None, :, :] * probs
+            tilde_p = weighted / weighted.sum(axis=2, keepdims=True)        # [N, M, K]
+            tilde_p_y = tilde_p[idx_n, idx_m, y_idx[:, None]]                # [N, M] = tilde_p_{i,y_i}^{(m)}
+            joint = alpha[None, :] * tilde_p_y                               # [N, M]
+            p_hat_y = joint.sum(axis=1, keepdims=True)                       # [N, 1] = p_hat_{i,y_i}
+            gamma = joint / p_hat_y                                           # [N, M]
 
             # Observed-data weighted log-likelihood (sum_i nu_yi log p_hat_iyi),
             # evaluated at the CURRENT (alpha, W) before this iteration's
-            # updates -- EM guarantees this is non-decreasing across iterations.
+            # updates -- EM guarantees this is non-decreasing across iterations
+            # WITHIN one trajectory (it says nothing about which stationary
+            # point different starts land on -- that's what fit() compares).
             ll = float(np.sum(nu_i * np.log(np.clip(p_hat_y[:, 0], 1e-300, None))))
 
             # ---- M-step, alpha: closed form (Eq. 5) ----
-            weighted_gamma = nu_i[:, None] * gamma                       # [N, M] = c_i for each m
-            self.alpha = weighted_gamma.sum(axis=0) / nu_i.sum()
+            weighted_gamma = nu_i[:, None] * gamma                            # [N, M] = c_i for each m
+            alpha = weighted_gamma.sum(axis=0) / nu_i.sum()
 
             # ---- M-step, W: per-submodel MM fixed point (Eq. 9) ----
             for m in range(M):
-                c_m = weighted_gamma[:, m]                                # [N]
+                c_m = weighted_gamma[:, m]                                     # [N]
                 n_k = np.bincount(y_idx, weights=c_m, minlength=K) + pseudocount
-                w = self.weights[m].copy()
+                w = weights[m].copy()
                 for _ in range(mm_iters):
-                    s_i = np.clip(probs[:, m, :] @ w, 1e-300, None)         # [N]
+                    s_i = np.clip(probs[:, m, :] @ w, 1e-300, None)              # [N]
                     d_k = np.clip((probs[:, m, :] * (c_m / s_i)[:, None]).sum(axis=0), 1e-300, None)  # [K]
                     w = n_k / d_k
-                self.weights[m] = w / w.sum()  # renormalize: eq. 1 is scale-invariant in w_m
+                weights[m] = w / w.sum()  # renormalize: eq. 1 is scale-invariant in w_m
 
             if verbose and (it % 10 == 0 or it == max_iter - 1):
-                print(f"EM iter {it}: weighted log-lik = {ll:.4f}")
+                print(f"{label}EM iter {it}: weighted log-lik = {ll:.4f}")
 
             if abs(ll - prev_ll) < tol * (abs(prev_ll) + 1e-12):
                 if verbose:
-                    print(f"EM converged at iter {it} (delta log-lik = {ll - prev_ll:.2e})")
+                    print(f"{label}EM converged at iter {it} (delta log-lik = {ll - prev_ll:.2e})")
                 break
             prev_ll = ll
 
+        return alpha, weights, ll
+
+    def fit(self, logits, y_idx, nu, n_starts=10, max_iter=200, mm_iters=5,
+            tol=1e-6, pseudocount=1e-3, seed=42, verbose=True):
+        """
+        Fits alpha and W by EM, from `n_starts` independent random
+        initializations. `logits` ([N, M, K], raw submodel outputs) and
+        `y_idx` ([N], integer true class per sample) are fixed throughout.
+
+        The W-subproblem is non-concave (see the Caveats section of the
+        EM/MM derivation this implements): each single EM run is only
+        guaranteed to reach A stationary point, not THE global optimum, and
+        which one depends on the starting point. This runs `n_starts`
+        independent trajectories (different seeds) and keeps whichever
+        converges to the highest final observed-data log-likelihood. Each
+        trajectory is cheap on its own (a handful of iterations, no
+        gradients), so this multiplies fit()'s own cost by n_starts without
+        repeating the (much more expensive) submodel logit extraction the
+        caller already did once to produce `logits`.
+        """
+        N, M, K = logits.shape
+        probs = self._softmax(logits)  # p_i^(m): fixed for every start
+        nu_i = nu[y_idx]  # [N], nu_{y_i}
+
+        best_alpha, best_weights, best_ll = None, None, -np.inf
+        for start in range(n_starts):
+            label = f"[start {start + 1}/{n_starts}] " if verbose else ""
+            alpha, weights, ll = self._fit_single(
+                probs, y_idx, nu_i, seed=seed + start,
+                max_iter=max_iter, mm_iters=mm_iters, tol=tol,
+                pseudocount=pseudocount, verbose=verbose, label=label,
+            )
+            if verbose:
+                print(f"{label}final weighted log-lik = {ll:.4f}")
+            if ll > best_ll:
+                best_alpha, best_weights, best_ll = alpha, weights, ll
+
+        self.alpha, self.weights = best_alpha, best_weights
+        if verbose:
+            print(f"Best of {n_starts} starts: weighted log-lik = {best_ll:.4f}")
         return self
 
 #This code comes from https://github.com/itakurah/Focal-loss-PyTorch/blob/main/focal_loss.py

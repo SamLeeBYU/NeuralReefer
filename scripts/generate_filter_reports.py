@@ -16,24 +16,41 @@ files is no longer in the repository (filter.py's confusion-matrix logic is
 commented out, and nothing ever wrote model_performance.txt -- see the
 scripts/train.py conversation this was built from).
 
-Split methodology: every CoralFilter submodel is built during training with
-the same stratified split -- test_size=SPLIT, random_state=42 (filter.py,
-CoralFilter.__init__) -- before bootstrap-resampling its own training
-partition. This script reconstructs that same stratified split (same seed,
-same SPLIT) once, shared across all submodels and the ensemble:
+Split methodology -- three nested partitions of MASK_DATA_PATH, matching
+CoralFilterEnsembler.train_ensemble()'s own split exactly (same seed=42,
+same SPLIT/ENSEMBLE_SPLIT fractions):
 
-  - "out-of-sample" = the held-out partition, identical across every
-    submodel by construction (same seed => same split), matching the
-    original file's own claim that all submodels were scored on "the exact
-    same set" of validation masks. The confusion matrix is computed here,
-    on the ensemble's predictions.
-  - "in-sample" = the remaining training partition. NOTE: each submodel
-    was actually trained on its own *bootstrapped resample* of this
-    partition (filter.py:91-92).
+  1. The full (oversampled) dataset splits SPLIT-wise into the submodels'
+     own training pool ("in-sample" for the submodel rows -- NOTE: each
+     submodel actually trained on its own *bootstrapped resample* of this
+     partition, filter.py:91-92, not the literal partition) and the
+     "ensemble pool" -- masks none of the 5 submodels ever trained on.
+  2. The ensemble pool splits ENSEMBLE_SPLIT-wise into what the EM fit
+     actually trained on ("in-sample" for the Ensemble row) and a final
+     held-out slice.
+  3. That final slice is used, uniformly, as "out-of-sample" for every row
+     of the table AND the confusion matrix -- it's the one set untouched by
+     both the submodels' training and the ensemble's own fit, so every
+     reported out-of-sample number is computed on identical data.
+
+This deliberately treats mask crops as exchangeable/independent regardless
+of source image (an explicit, documented modeling assumption for fitting
+and validating the classifier stage) -- the true, photo-independent test
+of the full pipeline is the separate segmentation-level eval against the
+111 held-out test images (scripts/train.py's eval()), which this script
+does not touch.
 
 Evaluation uses the deterministic MASK_TRANSFORM (no random augmentation)
 rather than the training-time MASK_TRANSFORM_AUGMENT, and a fixed seed, so
 re-running this script reproduces the same numbers every time.
+
+The expensive step (forward-passing every submodel over the whole dataset)
+is shared with scripts/retrain_ensemble.py via filter.extract_submodel_logits()
+and LOGIT_CACHE_PATH -- this script's "in-sample"/"out-of-sample" split of
+the FULL dataset is a superset of retrain_ensemble.py's own 30% ensemble
+pool (same seed, same split fraction => the same held-out indices), so
+whichever of the two scripts runs first and populates the cache saves the
+other one the ~hours-long extraction cost.
 
 Run as a standalone script from the repository root:
     python scripts/generate_filter_reports.py
@@ -44,13 +61,16 @@ import json
 
 import numpy as np
 import torch
+
 from sklearn.model_selection import train_test_split
 
-from config import FILTER_MODELS_DIR, MASK_DATA_PATH, M, SPLIT
-from filter import CoralFilterEnsembler
-from transforms import MASK_TRANSFORM
+from config import FILTER_MODELS_DIR, MASK_DATA_PATH, M, SPLIT, ENSEMBLE_SPLIT
+from filter import CoralFilterEnsembler, extract_submodel_logits
 
 SEED = 42
+# Shared with scripts/retrain_ensemble.py -- same path, same cache.
+LOGIT_CACHE_PATH = os.path.join(FILTER_MODELS_DIR, "submodel_logits_cache.npz")
+USE_LOGIT_CACHE = True
 
 
 def binary_coral_metrics(y_true_idx, y_pred_idx, noncoral_class):
@@ -73,22 +93,7 @@ def binary_coral_metrics(y_true_idx, y_pred_idx, noncoral_class):
     return accuracy, precision, recall
 
 
-def predict_logits(submodel, dataset, indices, batch_size=128):
-    """Forward-passes dataset.img_data[indices] through one submodel's raw
-    network, matching the logit computation CoralFilterEnsembler already
-    does internally in train_ensemble() (filter.py:337-343)."""
-    device = submodel.device
-    outputs = []
-    with torch.no_grad():
-        for start in range(0, len(indices), batch_size):
-            batch_idx = torch.as_tensor(indices[start:start + batch_size], dtype=torch.long)
-            X = dataset.img_data[batch_idx].to(device)
-            pred = submodel.model(X).squeeze(1)
-            outputs.append(pred.cpu().numpy())
-    return np.concatenate(outputs, axis=0)
-
-
-def format_performance_table(rows, ensemble_row, n_train, n_val):
+def format_performance_table(rows, ensemble_row, n_submodel_train, n_ensemble_train, n_oos):
     lines = []
     lines.append(f"{'':9s} {'In - Sample':^33s} {'Out-of-Sample':^33s}")
     lines.append(f"{'Model':9s} | {'Accuracy':8s} | {'Precision':9s} | {'Recall':6s} || "
@@ -103,12 +108,16 @@ def format_performance_table(rows, ensemble_row, n_train, n_val):
                  f"{oos_acc:.4f}   | {oos_prec:.4f}    | {oos_rec:.4f} |")
     lines.append("")
     lines.append(" Notes: Each submodel's in-sample figures are computed on the full")
-    lines.append(f" (non-bootstrapped) training partition it was drawn from ({n_train} masks) --")
+    lines.append(f" (non-bootstrapped) training partition it was drawn from ({n_submodel_train} masks) --")
     lines.append(" the exact bootstrapped resample each model actually trained on isn't")
     lines.append(" persisted, so this is the closest reproducible proxy, not the literal")
-    lines.append(f" training set. All out-of-sample statistics were collected on the same")
-    lines.append(f" shared held-out partition ({n_val} masks), matching every submodel's")
-    lines.append(" internal validation split (same stratified split, seed=42).")
+    lines.append(f" training set. The Ensemble row's in-sample figures are computed on the")
+    lines.append(f" {n_ensemble_train} masks the EM fit actually trained on -- disjoint from every")
+    lines.append(" submodel's training pool by construction (held out before any submodel")
+    lines.append(f" training began). All out-of-sample statistics (every row, and the")
+    lines.append(f" confusion matrix) are computed on the same shared {n_oos}-mask partition --")
+    lines.append(" the one slice untouched by both submodel training and the ensemble's own")
+    lines.append(" fit (same nested stratified splits, seed=42).")
     return "\n".join(lines) + "\n"
 
 
@@ -121,73 +130,83 @@ def main():
     print(f"using device: {device}")
 
     ensembler = CoralFilterEnsembler(base_dataset=MASK_DATA_PATH, device=device, m=M, split=SPLIT)
-
-    # Deterministic evaluation: use the non-augmented transform (no random
-    # crop/rotation/flip) so re-running this script gives identical numbers.
-    ensembler.mask_data.transform_fn = MASK_TRANSFORM
-    ensembler.mask_data.resample()
-
     ensembler.load_models(FILTER_MODELS_DIR)
 
     dataset = ensembler.mask_data
-    y_true_idx = torch.argmax(dataset.labels, dim=1).numpy()
     noncoral_class = ensembler.noncoral_class
     class_names = list(ensembler.classes.keys())
     k = len(class_names)
 
-    # The same stratified split every CoralFilter builds internally
-    # (filter.py:80-87), shared here across all submodels + the ensemble.
-    train_idx, val_idx = train_test_split(
+    # Expensive step, shared with retrain_ensemble.py -- sets the
+    # deterministic MASK_TRANSFORM and evaluates every submodel over the
+    # WHOLE dataset internally (see filter.extract_submodel_logits).
+    full_logits, y_true_idx = extract_submodel_logits(
+        ensembler.models, dataset, k,
+        batch_size=128, cache_path=LOGIT_CACHE_PATH, use_cache=USE_LOGIT_CACHE,
+    )
+
+    # Level 1: submodels' own training pool vs. the ensemble pool (masks no
+    # submodel ever trained on) -- the same split every CoralFilter builds
+    # internally (filter.py:80-87).
+    train_idx, ensemble_pool_idx = train_test_split(
         np.arange(len(dataset)),
         test_size=SPLIT,
         stratify=y_true_idx,
         random_state=SEED,
     )
-    print(f"In-sample pool: {len(train_idx)} masks | Out-of-sample (shared, held-out): {len(val_idx)} masks")
+    # Level 2: within the ensemble pool, what the EM fit actually trained on
+    # vs. a final held-out slice -- the same split train_ensemble() makes
+    # internally (filter.py, train_ensemble()).
+    ensemble_train_local, ensemble_oos_local = train_test_split(
+        np.arange(len(ensemble_pool_idx)),
+        test_size=ENSEMBLE_SPLIT,
+        stratify=y_true_idx[ensemble_pool_idx],
+        random_state=SEED,
+    )
+    ensemble_train_idx = ensemble_pool_idx[ensemble_train_local]
+    oos_idx = ensemble_pool_idx[ensemble_oos_local]  # shared out-of-sample set for EVERYTHING below
 
-    train_logits = np.zeros((len(train_idx), ensembler.m, k), dtype=np.float32)
-    val_logits = np.zeros((len(val_idx), ensembler.m, k), dtype=np.float32)
+    print(f"Submodel in-sample: {len(train_idx)} masks | "
+          f"Ensemble in-sample: {len(ensemble_train_idx)} masks | "
+          f"Out-of-sample (shared): {len(oos_idx)} masks")
+
+    train_logits = full_logits[train_idx]
+    ensemble_train_logits = full_logits[ensemble_train_idx]
+    oos_logits = full_logits[oos_idx]
 
     rows = []
     for m in range(ensembler.m):
-        print(f"Evaluating submodel {m + 1}/{ensembler.m}...")
-        submodel = ensembler.models[m]
-        submodel.model.eval()
-
-        train_logits[:, m, :] = predict_logits(submodel, dataset, train_idx)
-        val_logits[:, m, :] = predict_logits(submodel, dataset, val_idx)
-
         train_pred_idx = np.argmax(train_logits[:, m, :], axis=1)
-        val_pred_idx = np.argmax(val_logits[:, m, :], axis=1)
+        oos_pred_idx = np.argmax(oos_logits[:, m, :], axis=1)
 
         in_acc, in_prec, in_rec = binary_coral_metrics(y_true_idx[train_idx], train_pred_idx, noncoral_class)
-        oos_acc, oos_prec, oos_rec = binary_coral_metrics(y_true_idx[val_idx], val_pred_idx, noncoral_class)
+        oos_acc, oos_prec, oos_rec = binary_coral_metrics(y_true_idx[oos_idx], oos_pred_idx, noncoral_class)
 
         rows.append((f"  {m + 1}", in_acc, in_prec, in_rec, oos_acc, oos_prec, oos_rec))
 
     print("Evaluating ensemble...")
     # EMEnsembleOptimizer is pure NumPy (EM-fit, not gradient-trained) --
     # no device/eval-mode concept, predict_proba takes/returns numpy arrays.
-    train_ens_probs = ensembler.ensemble_model.predict_proba(train_logits)
-    val_ens_probs = ensembler.ensemble_model.predict_proba(val_logits)
+    ens_train_probs = ensembler.ensemble_model.predict_proba(ensemble_train_logits)
+    ens_oos_probs = ensembler.ensemble_model.predict_proba(oos_logits)
 
-    train_ens_pred_idx = np.argmax(train_ens_probs, axis=1)
-    val_ens_pred_idx = np.argmax(val_ens_probs, axis=1)
+    ens_train_pred_idx = np.argmax(ens_train_probs, axis=1)
+    ens_oos_pred_idx = np.argmax(ens_oos_probs, axis=1)
 
-    ens_in_acc, ens_in_prec, ens_in_rec = binary_coral_metrics(y_true_idx[train_idx], train_ens_pred_idx, noncoral_class)
-    ens_oos_acc, ens_oos_prec, ens_oos_rec = binary_coral_metrics(y_true_idx[val_idx], val_ens_pred_idx, noncoral_class)
+    ens_in_acc, ens_in_prec, ens_in_rec = binary_coral_metrics(y_true_idx[ensemble_train_idx], ens_train_pred_idx, noncoral_class)
+    ens_oos_acc, ens_oos_prec, ens_oos_rec = binary_coral_metrics(y_true_idx[oos_idx], ens_oos_pred_idx, noncoral_class)
     ensemble_row = ("Ensemble", ens_in_acc, ens_in_prec, ens_in_rec, ens_oos_acc, ens_oos_prec, ens_oos_rec)
 
     perf_path = os.path.join(FILTER_MODELS_DIR, "model_performance.txt")
     with open(perf_path, "w") as f:
-        f.write(format_performance_table(rows, ensemble_row, len(train_idx), len(val_idx)))
+        f.write(format_performance_table(rows, ensemble_row, len(train_idx), len(ensemble_train_idx), len(oos_idx)))
     print(f"Wrote {perf_path}")
 
     # Confusion matrix: ensemble predictions on the shared out-of-sample
-    # (held-out) partition -- resolves the ambiguity of not knowing which
-    # split the original file was computed on.
+    # partition -- the same set every out-of-sample number above uses, so
+    # the matrix and the table are directly comparable.
     cm = np.zeros((k, k), dtype=np.int64)
-    for t, p in zip(y_true_idx[val_idx], val_ens_pred_idx):
+    for t, p in zip(y_true_idx[oos_idx], ens_oos_pred_idx):
         cm[t, p] += 1
 
     cm_path = os.path.join(FILTER_MODELS_DIR, "confusion_matrix.txt")
@@ -196,7 +215,7 @@ def main():
         f.write("\n\nlabels: ")
         f.write(json.dumps(ensembler.classes, indent=4))
         f.write("\n")
-    print(f"Wrote {cm_path} (ensemble predictions, out-of-sample partition)")
+    print(f"Wrote {cm_path} (ensemble predictions, shared out-of-sample partition, {len(oos_idx)} masks)")
 
 
 if __name__ == "__main__":
