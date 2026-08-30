@@ -2,7 +2,9 @@
 Implements training and ensemble logic for binary coral classification.
 Defines:
 - CoralFilter: Wrapper to train and evaluate a single CoralClassifier model
-- CoralFilterEnsembler: Bootstrapped ensemble of CoralFilter models with logistic regression weighting
+- CoralFilterEnsembler: Bootstrapped ensemble of CoralFilter models, combined via a
+  weighted-aggregation ensemble fit with Expectation-Maximization (see EMEnsembleOptimizer
+  in classifier.py)
 """
 
 import os
@@ -15,14 +17,14 @@ from collections import Counter
 import torch
 import torch.nn as nn
 from torchvision.io import decode_image
-from torch.utils.data import DataLoader, Subset, TensorDataset
+from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import roc_auc_score, confusion_matrix
 
 from utils import convert_json_compat
 from data import MaskLoader
-from classifier import CoralClassifier, EnsembleOptimizer, FocalLoss, create_loss_fn
+from classifier import CoralClassifier, EMEnsembleOptimizer, FocalLoss, create_loss_fn
 
 from config import (
     VERBOSE, MASK_SIZE, FILTER_MODELS_DIR, CLASSES_FILE, PATIENCE, RES, NEG_WEIGHT
@@ -303,7 +305,7 @@ class CoralFilterEnsembler:
         self.seed = seed
 
         self.models = []
-        self.ensemble_model = EnsembleOptimizer(self.m, self.k)
+        self.ensemble_model = EMEnsembleOptimizer(self.m, self.k)
 
     def train(self, ensemble_split=0.1):
         for i in range(self.m):
@@ -348,130 +350,34 @@ class CoralFilterEnsembler:
             stratify=y_true
         )
 
-        self.X_train, self.y_train = torch.tensor(logits[ensemble_train_idx], dtype=torch.float32).to(self.device), self.mask_data.labels[idx][ensemble_train_idx].float().to(self.device)
-        self.X_test, self.y_test = torch.tensor(logits[ensemble_test_idx], dtype=torch.float32).to(self.device), self.mask_data.labels[idx][ensemble_test_idx].to(self.device)
+        # From here on the ensemble-combination stage is pure NumPy: the M
+        # submodels are already trained and frozen, so their logits are just
+        # fixed input data for the EM fit (see EMEnsembleOptimizer.fit).
+        self.X_train, self.y_train_idx = logits[ensemble_train_idx], y_true[ensemble_train_idx]
+        self.X_test, self.y_test_idx = logits[ensemble_test_idx], y_true[ensemble_test_idx]
 
-        N, M, K = self.X_train.shape
+        K = self.k
 
         #Alternatively, if you know the true distribution of coral classes across images you may substitute the class weights here
-        weights = torch.ones(K)
-        weights[self.noncoral_class] = NEG_WEIGHT
+        nu = np.ones(K)
+        nu[self.noncoral_class] = NEG_WEIGHT
 
-        self.ensemble_model = EnsembleOptimizer(M, K).to(self.device)
-        self.loss_fn = create_loss_fn(use_focal=True, gamma=0, reduction='sum', weight=weights).to(self.device)
-        self.train_weights()
-
-        #label-shift correction following Lipton et. al (2018) (Under Construction - We might not need it?)
-        #self.X_test_balanced, self.y_test_balanced = self.resample(self.X_test, self.y_test, self.mask_data.class_distribution, n=len(ensemble_test_idx))
-        # y_hat_probs = torch.softmax(self.ensemble_model(self.X_train), dim=1)
-        # y_hat_preds = torch.argmax(y_hat_probs, dim=1).cpu().numpy()
-        # y_train_classes = torch.argmax(self.y_train, dim=1).cpu().numpy()
-        # cm = confusion_matrix(y_train_classes, y_hat_preds).T
-        # C_hat = cm / cm.sum(axis=0, keepdims=True)
-        # mu_hat = np.bincount(y_hat_preds, minlength=K) / len(y_hat_preds)
-        # w = np.linalg.pinv(C_hat) @ mu_hat
-
-        #Plot CM
-        # import matplotlib.pyplot as plt
-        # import seaborn as sns
-        # class_names = list(self.mask_data.classes.keys())
-
-        # cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-
-        # sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
-        #             xticklabels=class_names, yticklabels=class_names)
-        # plt.xlabel('Predicted')
-        # plt.ylabel('True')
-        # plt.title('Normalized Confusion Matrix')
-        # plt.tight_layout()
-        # plt.show()
-
-        # self.ensemble_model = EnsembleOptimizer(M, K).to(self.device)
-        # self.loss_fn = create_loss_fn(use_focal=True, weight=torch.tensor(1/w/sum(1/w), dtype=torch.float32)).to(self.device)
-        # self.train_weights()
-
-    def train_weights(self, epochs=100000, batch_size=100, patience=100):
-
-        # dataset = TensorDataset(self.X_train, self.y_train)
-        # loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-        optimizer = torch.optim.Adam(self.ensemble_model.parameters(), lr=self.lr)
-        min_val_loss = float('inf')
-        bad_epochs = 0
-        best_model = None
-
-        for epoch in tqdm(range(epochs), desc="Learning Ensemble Weights"):
-            val_loss = 0.0
-            # for X_batch, y_batch in loader:
-            optimizer.zero_grad()
-            p = self.ensemble_model(self.X_train)
-            loss = self.loss_fn(p, self.y_train)
-            loss.backward()
-            optimizer.step()
-
-            self.ensemble_model.eval()
-            with torch.no_grad():
-                val_preds = self.ensemble_model(self.X_test)
-                val_loss = self.loss_fn(val_preds, self.y_test).item()
-
-            if val_loss < min_val_loss:
-                bad_epochs = 0
-                min_val_loss = val_loss
-                best_model = self.ensemble_model.state_dict()
-            else:
-                bad_epochs += 1
-
-            if bad_epochs > patience:
-                break
-
-        if best_model is not None:
-            self.ensemble_model.load_state_dict(best_model)
-
-    @staticmethod
-    def resample(x, y, class_distribution, n=1000):
-        K = y.shape[1]
-
-        labels_argmax = torch.argmax(y, dim=1).cpu().numpy()
-
-        class_buckets = {k: [] for k in range(K)}
-        for i, class_id in enumerate(labels_argmax):
-            class_buckets[class_id].append(i)
-
-        #Sample from each class bucket according to class_distribution
-        n_per_class = (np.array(class_distribution) * n).astype(int)
-
-        selected_indices = []
-        for k in range(K):
-            available = class_buckets[k]
-            if len(available) == 0:
-                print(f"Warning: no examples available for class {k}")
-                continue
-            sample_size = min(len(available), n_per_class[k])
-            sampled = np.random.choice(available, size=sample_size, replace=False)
-            selected_indices.extend(sampled)
-
-        X_test = x[selected_indices]
-        y_test = y[selected_indices]
-
-        return X_test, y_test
+        self.ensemble_model = EMEnsembleOptimizer(self.m, K)
+        self.ensemble_model.fit(self.X_train, self.y_train_idx, nu, seed=self.seed)
 
     def validate(self):
 
-        correct = 0
-        total = 0
-        true_positive, false_negative, false_positive = 0, 0, 0
-        with torch.no_grad():
-            y_hat = self.ensemble_model(self.X_test)
-            y_class = torch.argmax(self.y_test, dim=1)
-            probs = torch.softmax(y_hat, dim=1)           # shape: [N, K]
-            preds = torch.argmax(probs, dim=1)            # shape: [N]
-            correct += (preds == y_class).sum().item()
-            total += self.y_test.size(0)
+        probs = self.ensemble_model.predict_proba(self.X_test)  # [N, K], numpy
+        y_class = self.y_test_idx
+        preds = np.argmax(probs, axis=1)
 
-            #For coral/non-coral
-            true_positive += ((preds != self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
-            false_negative += ((preds == self.noncoral_class) & (y_class != self.noncoral_class)).sum().item()
-            false_positive += ((preds != self.noncoral_class) & (y_class == self.noncoral_class)).sum().item()
+        correct = int((preds == y_class).sum())
+        total = len(y_class)
+
+        #For coral/non-coral
+        true_positive = int(np.logical_and(preds != self.noncoral_class, y_class != self.noncoral_class).sum())
+        false_negative = int(np.logical_and(preds == self.noncoral_class, y_class != self.noncoral_class).sum())
+        false_positive = int(np.logical_and(preds != self.noncoral_class, y_class == self.noncoral_class).sum())
 
         recall = true_positive / (true_positive + false_negative) if (true_positive + false_negative) > 0 else 0
         precision = true_positive / (true_positive + false_positive) if (true_positive + false_positive) > 0 else 0
@@ -485,7 +391,22 @@ class CoralFilterEnsembler:
             os.makedirs(dir)
         for i, model in tqdm(enumerate(self.models), desc="Saving models"):
             model.save_model(os.path.join(dir, f"model_{i+1}.pth"))
-        torch.save(self.ensemble_model.state_dict(), os.path.join(dir, "ensemble.pth"))
+        np.savez(os.path.join(dir, "ensemble.npz"), alpha=self.ensemble_model.alpha, weights=self.ensemble_model.weights)
+
+        # Human-readable export of the same two arrays. Unlike the old
+        # torch-based EnsembleOptimizer (whose raw nn.Parameter values were
+        # pre-softmax and not directly interpretable -- softmax output is
+        # always in (0,1), but the old ensemble_params.json contained
+        # negative numbers, so it must have been dumping the unnormalized
+        # parameters), EMEnsembleOptimizer.alpha/.weights ARE the exact
+        # values used in predict_proba(): alpha sums to 1, each row of
+        # weights sums to 1. So this export is a direct, faithful view of
+        # the fitted ensemble, not merely a raw parameter dump.
+        with open(os.path.join(dir, "ensemble_params.json"), "w") as f:
+            json.dump({
+                "alpha": np.round(self.ensemble_model.alpha, 4).tolist(),
+                "weights": np.round(self.ensemble_model.weights, 4).tolist(),
+            }, f, indent=2)
 
     def load_models(self, dir=None, dim=None):
         dim = dim or self.k
@@ -501,10 +422,10 @@ class CoralFilterEnsembler:
                                     batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=False)
                 model.load_model(model_file)
                 self.models.append(model)
-        state_dict = torch.load(os.path.join(dir, "ensemble.pth"), map_location=self.device, weights_only=True)
-        self.ensemble_model.load_state_dict(state_dict)
-        self.ensemble_model = self.ensemble_model.to(self.device)
-        self.ensemble_model.eval()
+        ensemble_data = np.load(os.path.join(dir, "ensemble.npz"))
+        self.ensemble_model = EMEnsembleOptimizer(self.m, self.k)
+        self.ensemble_model.alpha = ensemble_data["alpha"]
+        self.ensemble_model.weights = ensemble_data["weights"]
 
     def predict(self, masks, img=None, img_path: str = None, mask_size=None):
         mask_size = mask_size or MASK_SIZE
@@ -513,10 +434,7 @@ class CoralFilterEnsembler:
             model = self.models[m]
             logits[:,m,:] = model.predict(masks, img, img_path, mask_size)
 
-        with torch.no_grad():
-            ensemble_proba = self.ensemble_model(torch.tensor(logits).to(self.device))
-
-        return ensemble_proba.cpu().numpy()
+        return self.ensemble_model.predict_proba(logits)
 
     @staticmethod
     def get_class_names(labels, class_dict):

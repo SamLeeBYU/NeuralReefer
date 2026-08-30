@@ -47,24 +47,34 @@ def union_mask(mask_list, shape=IMG_SIZE):
         return np.zeros(shape, dtype=bool)
     return np.any(np.stack(mask_list), axis=0)
 
-def pixel_iou_dice(true_mask, pred_mask):
+def pixel_confusion_metrics(true_mask, pred_mask):
     """
-    Pixel-level IoU/Dice(=F1) between two boolean masks, computed directly
-    from the raw TP/FP/FN pixel counts (no area normalization needed, since
-    it cancels out of the ratio) -- unlike the overall LCC metrics in
-    data_viz.R, which had to be reconstructed algebraically from aggregate
-    accuracy/coverage numbers because the per-mask arrays weren't available
-    there. Here we have the actual masks, so this is exact.
+    Pixel-level IoU/Dice(=F1)/precision/recall between two boolean masks,
+    computed directly from the raw TP/FP/FN pixel counts (no area
+    normalization needed, since it cancels out of every ratio here) --
+    unlike the overall LCC metrics in data_viz.R, which had to be
+    reconstructed algebraically from aggregate accuracy/coverage numbers
+    because the per-mask arrays weren't available there. Here we have the
+    actual masks, so this is exact.
+
+    precision/recall are NaN (not 0) when their denominator is zero, since
+    "no positive predictions" or "no positive ground truth" makes the ratio
+    undefined rather than 0 -- e.g. a taxonomy absent from both masks should
+    not be scored as 0 precision.
 
     Returns:
-        tp, fp, fn (int), iou, dice (float; 1.0 when both masks are empty)
+        tp, fp, fn (int); iou, dice, precision, recall (float; iou/dice are
+        1.0 when both masks are empty, matching the "correctly predicted
+        nothing" convention)
     """
     tp = int(np.logical_and(true_mask, pred_mask).sum())
     fp = int(np.logical_and(~true_mask, pred_mask).sum())
     fn = int(np.logical_and(true_mask, ~pred_mask).sum())
     iou = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 1.0
     dice = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
-    return tp, fp, fn, iou, dice
+    precision = tp / (tp + fp) if (tp + fp) > 0 else float("nan")
+    recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
+    return tp, fp, fn, iou, dice, precision, recall
 
 def enforce_spatial_independence(train_images, test_images, metadata, radius=SPATIAL_RADIUS):
     """
@@ -343,8 +353,10 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         coral_cover_class_true = np.zeros((len(test_images), len(genus_names)))
         coral_cover_class_pred = np.zeros((len(test_images), len(genus_names)))
 
-        # Per-taxonomy pixel-level IoU/Dice(=F1), computed directly from the
-        # actual predicted/ground-truth masks (see pixel_iou_dice)
+        # Per-taxonomy pixel-level IoU/Dice(=F1)/precision/recall, computed
+        # directly from the actual predicted/ground-truth masks (see
+        # pixel_confusion_metrics). Macro-averaging and confidence intervals
+        # are computed downstream, in data_viz.R, from this per-image CSV.
         taxonomy_records = []
 
         print(f"{'Idx':>4} | {'Acc':>6} | {'Avg Acc':>8} | {'True CC':>8} | {'Avg True CC':>12} | {'Pred CC':>8} | {'Avg Pred CC':>12}")
@@ -404,14 +416,15 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             coral_cover_class_healthy_true[i, :] = cc_true_healthy
             coral_cover_class_healthy_pred[i, :] = cc_pred_healthy
 
-            # Per-taxonomy IoU/Dice (see pixel_iou_dice / union_mask above).
+            # Per-taxonomy IoU/Dice/precision/recall (see pixel_confusion_metrics / union_mask above).
             image_id = get_image_id(image)
 
             def add_taxonomy_row(taxonomy, true_mask, pred_mask):
-                tp, fp, fn, iou, dice = pixel_iou_dice(true_mask, pred_mask)
+                tp, fp, fn, iou, dice, precision, recall = pixel_confusion_metrics(true_mask, pred_mask)
                 taxonomy_records.append({
                     "image": image, "image_id": image_id, "taxonomy": taxonomy,
-                    "tp_px": tp, "fp_px": fp, "fn_px": fn, "iou": iou, "dice_f1": dice
+                    "tp_px": tp, "fp_px": fp, "fn_px": fn,
+                    "iou": iou, "dice_f1": dice, "precision": precision, "recall": recall
                 })
 
             add_taxonomy_row("all_coral", union_mask(gt_masks), union_mask(masks))

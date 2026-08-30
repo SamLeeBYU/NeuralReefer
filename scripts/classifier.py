@@ -2,6 +2,7 @@
 This module defines the neural network architectures for each classifier
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torchvision.models import (
@@ -62,34 +63,109 @@ class CoralClassifier(nn.Module):
     def forward(self, x):
         return self.backbone(x)
 
-class EnsembleOptimizer(torch.nn.Module):
+class EMEnsembleOptimizer:
+    """
+    Weighted-aggregation ensemble combiner, fit via Expectation-Maximization
+    with a closed-form Minorize-Maximize (MM) update for the per-submodel
+    class-reweighting vectors. Pure NumPy -- no torch, no autodiff, no Adam.
+    (Replaces the old gradient-descent `EnsembleOptimizer`.)
+
+    Model (see the EM/MM derivation this implements):
+        p_i^(m)        = softmax(logit_i^(m))                          -- fixed, pretrained submodel output
+        w_m in R^K_++                                                   -- per-submodel class reweight
+        tilde_p_{i,k}^(m)(w_m) = w_{m,k} p_{i,k}^(m) / sum_j w_{m,j} p_{i,j}^(m)   -- Eq. 1
+        p_hat_i = sum_m alpha_m tilde_p_i^(m)(w_m),   alpha in simplex  -- Eq. 2
+
+    The M submodels are already trained and frozen by the time this runs --
+    their logits are just fixed input data for the EM fit, so there is
+    nothing here that needs gradients or an optimizer in the torch sense.
+    """
+
     def __init__(self, M, K):
-        super().__init__()
         self.M = M
         self.K = K
+        self.alpha = np.full(M, 1.0 / M)
+        self.weights = np.ones((M, K))
 
-        self.alpha = torch.nn.Parameter(torch.randn(M))       # [M]
-        self.weights = torch.nn.Parameter(torch.randn(M, K))  # [M, K]
+    @staticmethod
+    def _softmax(logits):
+        z = logits - logits.max(axis=-1, keepdims=True)
+        e = np.exp(z)
+        return e / e.sum(axis=-1, keepdims=True)
 
-    def forward(self, X):  # X: [N, M, K]
-        N, M, K = X.shape
-        assert M == self.M and K == self.K
+    def _reweighted_probs(self, probs, weights=None):
+        """Eq. 1. probs: [N, M, K] (already softmaxed) -> tilde_p: [N, M, K]."""
+        weights = self.weights if weights is None else weights
+        weighted = weights[None, :, :] * probs               # [N, M, K]
+        return weighted / weighted.sum(axis=2, keepdims=True)
 
-        #Normalize across K classes for each model
-        norm_weights = F.softmax(self.weights, dim=1)  # [M, K]
+    def predict_proba(self, logits):
+        """logits: [N, M, K] raw submodel logits -> p_hat: [N, K] (Eq. 2)."""
+        probs = self._softmax(logits)
+        tilde_p = self._reweighted_probs(probs)
+        return (self.alpha[None, :, None] * tilde_p).sum(axis=1)
 
-        # Normalize across M models
-        norm_alpha = F.softmax(self.alpha, dim=0).unsqueeze(0)  # [1, M]
+    def fit(self, logits, y_idx, nu, max_iter=200, mm_iters=5, tol=1e-6,
+            pseudocount=1e-3, seed=42, verbose=True):
+        """
+        Fits alpha and W by EM. `logits` ([N, M, K], raw submodel outputs)
+        and `y_idx` ([N], integer true class per sample) are fixed
+        throughout -- only alpha and W are estimated. `nu` ([K]) is the
+        per-class loss weight (nu_{y_i} in the derivation, e.g. down-
+        weighting the noncoral class).
+        """
+        rng = np.random.default_rng(seed)
+        N, M, K = logits.shape
+        probs = self._softmax(logits)  # p_i^(m): fixed for the whole fit
 
-        probs = F.softmax(X, dim=2)  # [N, M, K]; each row over K sums to 1
-        weighted_probs = norm_weights.unsqueeze(0) * probs  # [N, M, K]
+        # Small random perturbation off uniform, not an exact symmetric
+        # start -- a perfectly symmetric init is itself a (poor) stationary
+        # point of this non-convex problem.
+        self.alpha = np.full(M, 1.0 / M)
+        self.weights = np.exp(0.01 * rng.standard_normal((M, K)))
 
-        row_sums = weighted_probs.sum(dim=2, keepdim=True)  # [N, M, 1]
-        weighted_probs_normalized = weighted_probs / row_sums  # [N, M, K]
+        nu_i = nu[y_idx]  # [N], nu_{y_i}
+        idx_n, idx_m = np.arange(N)[:, None], np.arange(M)[None, :]
+        prev_ll = -np.inf
 
-        p = (norm_alpha.unsqueeze(2) * weighted_probs_normalized).sum(dim=1)  # [N, K]
+        for it in range(max_iter):
+            # ---- E-step: responsibilities (Eq. 4) ----
+            tilde_p = self._reweighted_probs(probs)                    # [N, M, K]
+            tilde_p_y = tilde_p[idx_n, idx_m, y_idx[:, None]]           # [N, M] = tilde_p_{i,y_i}^{(m)}
+            joint = self.alpha[None, :] * tilde_p_y                     # [N, M]
+            p_hat_y = joint.sum(axis=1, keepdims=True)                  # [N, 1] = p_hat_{i,y_i}
+            gamma = joint / p_hat_y                                      # [N, M]
 
-        return p  # [N, K], each row sums to 1
+            # Observed-data weighted log-likelihood (sum_i nu_yi log p_hat_iyi),
+            # evaluated at the CURRENT (alpha, W) before this iteration's
+            # updates -- EM guarantees this is non-decreasing across iterations.
+            ll = float(np.sum(nu_i * np.log(np.clip(p_hat_y[:, 0], 1e-300, None))))
+
+            # ---- M-step, alpha: closed form (Eq. 5) ----
+            weighted_gamma = nu_i[:, None] * gamma                       # [N, M] = c_i for each m
+            self.alpha = weighted_gamma.sum(axis=0) / nu_i.sum()
+
+            # ---- M-step, W: per-submodel MM fixed point (Eq. 9) ----
+            for m in range(M):
+                c_m = weighted_gamma[:, m]                                # [N]
+                n_k = np.bincount(y_idx, weights=c_m, minlength=K) + pseudocount
+                w = self.weights[m].copy()
+                for _ in range(mm_iters):
+                    s_i = np.clip(probs[:, m, :] @ w, 1e-300, None)         # [N]
+                    d_k = np.clip((probs[:, m, :] * (c_m / s_i)[:, None]).sum(axis=0), 1e-300, None)  # [K]
+                    w = n_k / d_k
+                self.weights[m] = w / w.sum()  # renormalize: eq. 1 is scale-invariant in w_m
+
+            if verbose and (it % 10 == 0 or it == max_iter - 1):
+                print(f"EM iter {it}: weighted log-lik = {ll:.4f}")
+
+            if abs(ll - prev_ll) < tol * (abs(prev_ll) + 1e-12):
+                if verbose:
+                    print(f"EM converged at iter {it} (delta log-lik = {ll - prev_ll:.2e})")
+                break
+            prev_ll = ll
+
+        return self
 
 #This code comes from https://github.com/itakurah/Focal-loss-PyTorch/blob/main/focal_loss.py
 class FocalLoss(nn.Module):

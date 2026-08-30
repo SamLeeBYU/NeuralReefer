@@ -2,6 +2,7 @@ library(tidyverse)
 library(readxl)
 library(dbscan)
 library(igraph)
+library(jsonlite)
 
 metadata = readxl::read_xlsx("data/metadata/Day3_Photo_MetaData_sr4.xlsx")
 
@@ -357,3 +358,326 @@ for (class_name in unique_classes) {
   ggsave(filename = file.path(save_dir, str_c("coral_cover_bias_", str_replace_all(class_name, "[:/ ]", "_"), ".png")),
          plot = bias_plot, width = plot_width, height = plot_height, dpi = dpi_val)
 }
+
+################################################################################
+
+# --- Genus / Bleaching Discrimination: Jaccard index, F1, Dice from confusion_matrix.txt ---
+# IMPORTANT terminology note: this is NOT the same kind of quantity as the
+# pixel-area-based segmentation "IoU" computed above for Live Coral Cover,
+# even though both use the identical |A intersect B| / |A union B| formula.
+# Here, the "set" being intersected/unioned is a set of CLASSIFIED MASK
+# INSTANCES (each unit is one candidate mask, already segmented -- there is
+# no notion of spatial/boundary overlap involved at all), whereas pixel IoU
+# measures agreement between two spatial regions. To avoid the two being
+# confused for the same measurement, this instance-count version is called
+# the Jaccard index here (matching sklearn.metrics.jaccard_score's usage
+# for multiclass classification), and "IoU" is reserved for the pixel-level
+# LCC metrics elsewhere in this file.
+#
+# Unlike the coverage CSV, a confusion matrix already contains the full joint
+# count for every (true, predicted) class pair, so per-class TP/FP/FN read
+# directly off it -- no missing-information problem, no algebra needed:
+#   TP_c = M[c, c]              (correctly classified masks of class c)
+#   FP_c = colSum(c) - TP_c     (masks predicted c but truly something else)
+#   FN_c = rowSum(c) - TP_c     (masks truly c but predicted something else)
+#   Jaccard_c = TP_c / (TP_c + FP_c + FN_c);  F1_c = Dice_c = 2*TP_c / (2*TP_c + FP_c + FN_c)
+#
+# Genus- and bleaching-level matrices are obtained by summing groups of rows/
+# columns of the raw 17-class (genus x bleach-status, + noncoral) matrix
+# together (e.g. all "<genus>:bleached" + "<genus>:healthy" cells collapse
+# into one "<genus>" cell) before applying the same formula.
+
+CONFUSION_MATRIX_PATH <- "models/filter_res34_5_v18/confusion_matrix.txt"
+
+# Parses the `print(confusion_matrix(...))` + `labels: {...}` dump written by
+# filter.py into a labeled matrix. Numbers are pulled only from within the
+# array([[ ... ]], dtype block so "int64" in the dtype suffix is never
+# mistaken for matrix entries.
+parse_confusion_matrix <- function(path) {
+  txt <- paste(readLines(path), collapse = " ")
+
+  array_match <- regmatches(txt, regexpr("array\\(\\[\\[(.*?)\\]\\],\\s*dtype", txt, perl = TRUE))
+  nums <- as.numeric(unlist(regmatches(array_match, gregexpr("-?\\d+", array_match))))
+
+  labels_match <- regmatches(txt, regexpr("labels:\\s*(\\{.*\\})\\s*$", txt, perl = TRUE))
+  labels_json <- sub("^labels:\\s*", "", labels_match)
+  label_map <- fromJSON(labels_json)
+
+  k <- length(label_map)
+  cm <- matrix(nums, nrow = k, ncol = k, byrow = TRUE)
+  class_names <- names(sort(unlist(label_map)))  # order by index 0..k-1
+  dimnames(cm) <- list(true = class_names, pred = class_names)
+  cm
+}
+
+# Per-class TP/FP/FN/precision/recall/F1/Jaccard from a (possibly collapsed)
+# confusion matrix. `jaccard` here is the instance-count Jaccard index, NOT
+# pixel-level IoU -- see the note above.
+confusion_matrix_metrics <- function(cm) {
+  tibble(
+    class = rownames(cm),
+    tp = diag(cm),
+    fp = colSums(cm) - diag(cm),
+    fn = rowSums(cm) - diag(cm)
+  ) %>%
+    mutate(
+      precision = tp / (tp + fp),
+      recall = tp / (tp + fn),
+      f1 = 2 * tp / (2 * tp + fp + fn),
+      jaccard = tp / (tp + fp + fn)
+    )
+}
+
+# Sums groups of rows/cols together to collapse a fine-grained confusion
+# matrix (e.g. genus:bleached / genus:healthy) into coarser classes.
+collapse_confusion_matrix <- function(cm, groups) {
+  group_names <- names(groups)
+  out <- matrix(0, nrow = length(groups), ncol = length(groups),
+                dimnames = list(group_names, group_names))
+  for (gi in group_names) {
+    for (gj in group_names) {
+      out[gi, gj] <- sum(cm[groups[[gi]], groups[[gj]], drop = FALSE])
+    }
+  }
+  out
+}
+
+cm_raw <- parse_confusion_matrix(CONFUSION_MATRIX_PATH)
+
+genus_groups <- list(
+  branching_acropora = c("branching_acropora:bleached", "branching_acropora:healthy"),
+  finger_acropora    = c("finger_acropora:bleached", "finger_acropora:healthy"),
+  finger_porites     = c("finger_porites:bleached", "finger_porites:healthy"),
+  knob_porites       = c("knob_porites:bleached", "knob_porites:healthy"),
+  mounding_          = c("mounding_:bleached", "mounding_:healthy"),
+  oddball            = c("oddball:bleached", "oddball:healthy"),
+  pocillopora_       = c("pocillopora_:bleached", "pocillopora_:healthy"),
+  table_acropora     = c("table_acropora:bleached", "table_acropora:healthy"),
+  noncoral           = "noncoral"
+)
+cm_genus <- collapse_confusion_matrix(cm_raw, genus_groups)
+genus_metrics <- confusion_matrix_metrics(cm_genus)
+
+bleach_groups <- list(
+  bleached = grep(":bleached$", colnames(cm_raw), value = TRUE),
+  healthy  = grep(":healthy$", colnames(cm_raw), value = TRUE),
+  noncoral = "noncoral"
+)
+cm_bleach <- collapse_confusion_matrix(cm_raw, bleach_groups)
+# Coral-only subset excludes the noncoral row/col: bleaching status is only
+# meaningful for masks that both sides agree are actually coral.
+cm_bleach_coral_only <- cm_bleach[c("bleached", "healthy"), c("bleached", "healthy")]
+bleach_metrics <- confusion_matrix_metrics(cm_bleach_coral_only)
+
+cat("Genus discrimination (mask-count Jaccard/F1/Dice, from confusion_matrix.txt):\n")
+print(genus_metrics)
+cat("macro F1:", mean(genus_metrics$f1), " macro Jaccard:", mean(genus_metrics$jaccard),
+    " overall accuracy:", sum(diag(cm_genus)) / sum(cm_genus), "\n\n")
+
+cat("Bleaching discrimination, coral-only (mask-count Jaccard/F1/Dice):\n")
+print(bleach_metrics)
+
+# ---- Confusion matrix heatmaps (row-normalized: each row sums to 1) ----
+plot_confusion_heatmap <- function(cm, title, filename) {
+  cm_norm <- cm / rowSums(cm)
+  cm_df <- as_tibble(cm_norm, rownames = "true") %>%
+    pivot_longer(-true, names_to = "pred", values_to = "prop") %>%
+    mutate(true = factor(true, levels = rownames(cm)),
+           pred = factor(pred, levels = colnames(cm)))
+
+  p <- ggplot(cm_df, aes(x = pred, y = true, fill = prop)) +
+    geom_tile() +
+    geom_text(aes(label = sprintf("%.2f", prop)), size = 3) +
+    scale_fill_gradient(low = "white", high = "steelblue", limits = c(0, 1)) +
+    labs(x = "Predicted", y = "True", title = title, fill = "Row %") +
+    theme_minimal(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5, face = "bold"))
+
+  ggsave(filename = file.path(save_dir, filename), plot = p,
+         width = plot_width * 2, height = plot_height * 2, dpi = dpi_val)
+  p
+}
+
+plot_confusion_heatmap(cm_genus, "Genus Discrimination", "confusion_matrix_genus.png")
+plot_confusion_heatmap(cm_bleach_coral_only, "Bleaching Discrimination (coral-only)", "confusion_matrix_bleaching.png")
+################################################################################
+
+# --- F1 / Dice / Jaccard for each submodel + the ensemble, from model_performance.txt ---
+# Like the confusion-matrix section above (and unlike the pixel-level LCC
+# IoU section), this is an instance-count metric, not a spatial one -- so it
+# is labeled `jaccard`, not `iou`, for the same reason. It's also a coarser
+# collapse than the per-genus/per-bleach Jaccard above: precision/recall in
+# model_performance.txt come from filter.py's test()/validate(), which
+# collapse ALL 16 non-noncoral classes into one "coral" bucket (a true
+# branching_acropora mask predicted as finger_porites still counts as a
+# true positive here) -- i.e. "is this mask coral at all", not "which coral".
+#
+# F1 = Dice = 2*P*R/(P+R) is just the harmonic mean of precision and recall,
+# so it needs nothing beyond the precision/recall columns already in the
+# file. Jaccard is recoverable too, via the standard Dice<->Jaccard identity
+# Jaccard = F1/(2-F1) (equivalently P*R/(P+R-P*R)) -- no raw TP/FP/FN counts
+# needed, since precision and recall already summarize that same binary
+# (coral vs. noncoral) confusion matrix. This is the same identity used for
+# the coral-cover IoU/Dice section above (there derived the other way:
+# Dice from IoU) -- the algebra is identical either way, only the
+# underlying population (pixels vs. mask instances) differs.
+#
+# Sanity check: collapsing confusion_matrix.txt's raw 17-class matrix into
+# coral-vs-noncoral the same way (sum the full 16x16 coral sub-block, not
+# just its diagonal) reproduces the Ensemble out-of-sample row here exactly
+# (precision=0.9433, recall=0.9577, on the same 1,762 held-out masks) --
+# confirming both files were scored on the same split.
+
+MODEL_PERFORMANCE_PATH <- "models/filter_res34_5_v18/model_performance.txt"
+
+# Parses the fixed-width "Model | Accuracy | Precision | Recall || Accuracy |
+# Precision | Recall |" table written by filter.py / generate_filter_reports.py.
+parse_model_performance <- function(path) {
+  lines <- readLines(path, warn = FALSE)
+  data_lines <- lines[str_detect(lines, "^\\s*(\\d+|Ensemble)\\s*\\|")]
+
+  map(data_lines, function(line) {
+    fields <- str_split(line, "\\|")[[1]] %>% str_trim()
+    fields <- fields[fields != ""]
+    tibble(
+      model = fields[1],
+      in_accuracy = as.numeric(fields[2]),
+      in_precision = as.numeric(fields[3]),
+      in_recall = as.numeric(fields[4]),
+      oos_accuracy = as.numeric(fields[5]),
+      oos_precision = as.numeric(fields[6]),
+      oos_recall = as.numeric(fields[7])
+    )
+  }) %>% bind_rows()
+}
+
+# Adds `<prefix>_f1`, `<prefix>_dice` (identical to f1), and `<prefix>_jaccard`
+# (instance-count Jaccard index, NOT pixel-level IoU) columns computed from
+# an existing precision/recall pair.
+add_f1_dice_jaccard <- function(df, precision_col, recall_col, prefix) {
+  p <- df[[precision_col]]
+  r <- df[[recall_col]]
+  f1 <- 2 * p * r / (p + r)
+  df[[paste0(prefix, "_f1")]] <- f1
+  df[[paste0(prefix, "_dice")]] <- f1
+  df[[paste0(prefix, "_jaccard")]] <- f1 / (2 - f1)
+  df
+}
+
+model_performance <- parse_model_performance(MODEL_PERFORMANCE_PATH) %>%
+  add_f1_dice_jaccard("in_precision", "in_recall", "in") %>%
+  add_f1_dice_jaccard("oos_precision", "oos_recall", "oos")
+
+cat("Per-model / ensemble F1, Dice, Jaccard -- coral-vs-noncoral detection, mask-count based\n")
+cat("(derived from precision & recall in model_performance.txt):\n")
+print(model_performance %>% select(model, starts_with("in_"), starts_with("oos_")))
+
+ensemble_oos <- model_performance %>% filter(model == "Ensemble")
+cat(sprintf(
+  "\nEnsemble, out-of-sample coral detection: F1/Dice = %.4f, Jaccard = %.4f\n",
+  ensemble_oos$oos_f1, ensemble_oos$oos_jaccard
+))
+################################################################################
+
+# --- Per-taxonomy PIXEL-level IoU/Dice/precision/recall, macro-averaged, ---
+# --- with bootstrap confidence intervals                                 ---
+# This is the genuine spatial-overlap IoU (a reviewer asking for "IoU, Dice,
+# F1, per-class precision/recall, macro-averaged metrics, and confidence
+# intervals" on segmentation quality means THIS section, not the
+# instance-count Jaccard from confusion_matrix.txt above) -- computed by
+# scripts/train.py's eval loop directly from predicted vs. ground-truth
+# masks (see pixel_confusion_metrics/union_mask/taxonomy_records there),
+# one row per (image, taxonomy). Requires running that eval loop at least
+# once; this section no-ops with a message if the CSV isn't there yet.
+
+TAXONOMY_METRICS_PATH <- "data/performance/coral_segmenter_taxonomy_metrics.v.1.0.csv"
+
+if (!file.exists(TAXONOMY_METRICS_PATH)) {
+
+  cat("\n", TAXONOMY_METRICS_PATH, "not found -- run train.py's eval loop to generate it",
+      "before this section can compute pixel-level per-taxonomy IoU/Dice/precision/recall.\n")
+
+} else {
+
+  taxonomy_df <- read_csv(TAXONOMY_METRICS_PATH, show_col_types = FALSE)
+
+  # Nonparametric bootstrap CI for the mean of one metric column, resampling
+  # images (the natural iid unit here -- each image contributes one value
+  # per taxonomy) with replacement.
+  bootstrap_ci <- function(x, n_boot = 2000, seed = 42) {
+    set.seed(seed)
+    x <- x[!is.na(x)]
+    if (length(x) == 0) return(c(low = NA_real_, high = NA_real_))
+    boot_means <- replicate(n_boot, mean(sample(x, length(x), replace = TRUE)))
+    q <- quantile(boot_means, c(0.025, 0.975))
+    c(low = unname(q[1]), high = unname(q[2]))
+  }
+
+  # Per-taxonomy mean + 95% CI for one metric, one taxonomy at a time
+  # (images are resampled independently per taxonomy here).
+  summarize_metric_ci <- function(df, metric) {
+    df %>%
+      group_by(taxonomy) %>%
+      group_modify(~ {
+        ci <- bootstrap_ci(.x[[metric]])
+        tibble(n_images = nrow(.x), mean = mean(.x[[metric]], na.rm = TRUE),
+               ci_low = ci["low"], ci_high = ci["high"])
+      }) %>%
+      ungroup() %>%
+      rename_with(~ paste0(metric, "_", .x), c(mean, ci_low, ci_high))
+  }
+
+  # Macro-average across `classes` (unweighted mean of each class's own
+  # mean), with its own bootstrap CI -- resampling IMAGES jointly across all
+  # classes each draw (not each class independently), since every class's
+  # value for a given image comes from the same underlying prediction, so
+  # resampling them separately would understate the true correlation and
+  # produce an overly narrow (wrong) CI for the macro-average.
+  macro_bootstrap <- function(df, metric, classes, n_boot = 2000, seed = 42) {
+    set.seed(seed)
+    wide <- df %>%
+      filter(taxonomy %in% classes) %>%
+      select(image_id, taxonomy, value = all_of(metric)) %>%
+      pivot_wider(names_from = taxonomy, values_from = value)
+
+    n <- nrow(wide)
+    class_mat <- as.matrix(wide[, classes])
+    point_est <- mean(colMeans(class_mat, na.rm = TRUE))
+
+    boot_macro <- replicate(n_boot, {
+      idx <- sample(seq_len(n), n, replace = TRUE)
+      mean(colMeans(class_mat[idx, , drop = FALSE], na.rm = TRUE))
+    })
+    ci <- quantile(boot_macro, c(0.025, 0.975))
+    tibble(metric = metric, macro_mean = point_est, ci_low = unname(ci[1]), ci_high = unname(ci[2]))
+  }
+
+  taxonomy_summary <- summarize_metric_ci(taxonomy_df, "iou") %>%
+    left_join(summarize_metric_ci(taxonomy_df, "dice_f1"), by = c("taxonomy", "n_images")) %>%
+    left_join(summarize_metric_ci(taxonomy_df, "precision"), by = c("taxonomy", "n_images")) %>%
+    left_join(summarize_metric_ci(taxonomy_df, "recall"), by = c("taxonomy", "n_images"))
+
+  cat("Per-taxonomy pixel-level IoU/Dice/precision/recall (mean + 95% bootstrap CI over images):\n")
+  print(taxonomy_summary, n = Inf)
+
+  # Macro-average over the 8 mutually-exclusive genus classes only --
+  # "all_coral", "bleached", and the "<genus>:healthy" rows are different
+  # groupings of the same underlying data, not additional classes in that
+  # partition, and would double-count if included in the same average.
+  genus_classes <- taxonomy_df %>%
+    distinct(taxonomy) %>%
+    filter(!taxonomy %in% c("all_coral", "bleached"), !str_detect(taxonomy, ":")) %>%
+    pull(taxonomy)
+
+  macro_summary <- bind_rows(
+    macro_bootstrap(taxonomy_df, "iou", genus_classes),
+    macro_bootstrap(taxonomy_df, "dice_f1", genus_classes),
+    macro_bootstrap(taxonomy_df, "precision", genus_classes),
+    macro_bootstrap(taxonomy_df, "recall", genus_classes)
+  )
+  cat("\nMacro-averaged pixel-level metrics across the", length(genus_classes),
+      "genus classes (mean + 95% bootstrap CI, jointly resampled over images):\n")
+  print(macro_summary, n = Inf)
+}
+################################################################################
