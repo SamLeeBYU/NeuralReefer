@@ -29,10 +29,7 @@ same SPLIT) once, shared across all submodels and the ensemble:
     on the ensemble's predictions.
   - "in-sample" = the remaining training partition. NOTE: each submodel
     was actually trained on its own *bootstrapped resample* of this
-    partition (filter.py:91-92), and that specific resample isn't
-    persisted anywhere -- only the final weights are. So this is the
-    closest reproducible proxy (the full pool each model was drawn from),
-    not the literal bootstrap draw used at training time.
+    partition (filter.py:91-92).
 
 Evaluation uses the deterministic MASK_TRANSFORM (no random augmentation)
 rather than the training-time MASK_TRANSFORM_AUGMENT, and a fixed seed, so

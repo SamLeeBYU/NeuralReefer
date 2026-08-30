@@ -3,22 +3,6 @@ Retrains ONLY the ensemble-combination stage (alpha, W -- fit via the new
 EM algorithm in classifier.EMEnsembleOptimizer) using the already-trained
 CNN submodel weights on disk (model_1.pth .. model_M.pth). Does not retrain
 the CNN submodels themselves.
-
-Needed because CoralFilterEnsembler's optimization method was rewritten
-from a torch/Adam-trained EnsembleOptimizer to a pure-NumPy EM/MM fit
-(EMEnsembleOptimizer): the two use incompatible parameterizations, so the
-existing models/<...>/ensemble.pth (Adam-fit) cannot be loaded by the new
-code, and load_models() will raise FileNotFoundError looking for
-ensemble.npz until this is run once.
-
-Writes ensemble.npz and ensemble_params.json via the real
-CoralFilterEnsembler.save_models() (also re-saves the 5 submodel .pth
-files with identical, unchanged weights -- harmless, keeps this script's
-output in parity with the normal training path rather than a bespoke
-partial save).
-
-Run from the repository root:
-    python scripts/retrain_ensemble.py
 """
 
 import os
@@ -36,9 +20,7 @@ def main():
 
     ensembler = CoralFilterEnsembler(base_dataset=MASK_DATA_PATH, device=device, m=M, split=SPLIT)
 
-    # Load the already-trained submodels directly -- same loop as
-    # CoralFilterEnsembler.load_models(), minus the (currently missing)
-    # ensemble.npz load at the end.
+    # Load the already-trained submodels directly
     model_files = sorted(glob(os.path.join(FILTER_MODELS_DIR, "model_*.pth")))
     assert len(model_files) == ensembler.m, (
         f"expected {ensembler.m} submodel files in {FILTER_MODELS_DIR}, found {len(model_files)}"
@@ -59,6 +41,11 @@ def main():
 
     ensembler.train_ensemble()
     ensembler.validate()
+
+    # save_models() writes both ensemble.npz and ensemble_params.json (and
+    # re-saves the 5 submodel .pth files with identical, unchanged weights,
+    # harmless) -- calling it directly here, rather than a bespoke np.savez,
+    # keeps ensemble_params.json in sync with ensemble.npz on every rerun.
     ensembler.save_models(FILTER_MODELS_DIR)
     print(f"Wrote {FILTER_MODELS_DIR}/ensemble.npz and ensemble_params.json")
     print("alpha:", ensembler.ensemble_model.alpha)
