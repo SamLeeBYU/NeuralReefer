@@ -11,18 +11,19 @@ eval.dat = read_csv("data/performance/coral_segmenter_predictions.v.1.0.csv")
 # --- Train/Test Independence Check ---------------------------------------
 # eval.dat above was scored over every image in data/train (train ∪ test,
 # 552 rows), so before trusting any "test set" statistic we need to know
-# which images are actually test images, and whether any test image sits
-# within SPATIAL_RADIUS_M of a train image. Nearby/overlapping photos have
-# correlated coral cover, so a test image within that radius of a train
-# image violates the train/test independence assumption (see
-# scripts/train.py::enforce_spatial_independence, which now prevents this
-# for splits built going forward -- this section audits/cleans up eval runs,
-# like this v1.0 one, that predate that check).
+# which images are actually test images, and whether any test image has a
+# seafloor footprint overlapping a train image (dist < r_train + r_test).
+# Footprint radius is depth-based GoPro FoV (see scripts/train.py::hold_out).
+# Nearby/overlapping photos have correlated coral cover, so a test image whose
+# footprint overlaps a train image violates the train/test independence
+# assumption (see scripts/train.py::hold_out, which prevents this for splits
+# built going forward -- this section audits/cleans up eval runs, like this
+# v1.0 one, that predate that check).
 #
 # Set EXCLUDE_INDEPENDENCE_VIOLATIONS <- TRUE to drop the violating images
 # from eval.dat before any stats/plots below are computed.
 
-SPATIAL_RADIUS_M <- 2  # meters; matches config.SPATIAL_RADIUS
+CAMERA_HFOV_DEG <- 89  # degrees; matches config.CAMERA_HFOV_DEG
 EXCLUDE_INDEPENDENCE_VIOLATIONS <- FALSE
 
 split.dat <- read_csv("data/performance/train_test_split_metadata.csv", show_col_types = FALSE) %>%
@@ -32,25 +33,39 @@ split.dat <- read_csv("data/performance/train_test_split_metadata.csv", show_col
 eval.dat <- eval.dat %>% left_join(split.dat, by = "image_id")
 
 coords <- eval.dat %>% select(NorthPhoto_UTM, EastPhoto_UTM)
-has_coords <- complete.cases(coords) & !is.na(eval.dat$split)
+eval.dat$fov_radius_m <- abs(eval.dat$Depth_WaterSurface) *
+  tan((CAMERA_HFOV_DEG / 2) * pi / 180)
+has_spatial <- complete.cases(coords) &
+  !is.na(eval.dat$split) &
+  !is.na(eval.dat$fov_radius_m)
 
 eval.dat$violates_independence <- FALSE
 
-# Fixed-radius nearest-neighbor search via a kd-tree (dbscan::frNN) instead
-# of an O(N^2) all-pairs distance matrix, then connected components
-# (igraph) over the resulting "within radius" graph: if a test image is
-# only indirectly close to a train image (through a chain of other nearby
-# photos), it still leaks, so any cluster touching both splits should be
-# treated as a violation, not just directly-adjacent pairs.
-coord_mat <- as.matrix(coords[has_coords, ])
-nn <- dbscan::frNN(coord_mat, eps = SPATIAL_RADIUS_M)
+# Variable-radius overlap graph: edge (i, j) when dist(i, j) < r_i + r_j.
+# Broad-phase kd-tree at 2 * max(r), then filter, then connected components
+# (igraph): if a test image is only indirectly overlapping a train image
+# (through a chain of other photos), it still leaks, so any cluster touching
+# both splits should be treated as a violation.
+coord_mat <- as.matrix(coords[has_spatial, ])
+radii <- eval.dat$fov_radius_m[has_spatial]
+n_pts <- nrow(coord_mat)
+max_r <- max(radii)
+nn <- dbscan::frNN(coord_mat, eps = 2 * max_r)
 
-edges <- do.call(rbind, lapply(seq_along(nn$id), function(i) {
+edges <- do.call(rbind, lapply(seq_len(n_pts), function(i) {
   nbrs <- nn$id[[i]]
-  nbrs <- nbrs[nbrs > i]  # de-duplicate: keep each edge once
+  nbrs <- nbrs[nbrs > i]
+  if (length(nbrs) == 0) return(NULL)
+  dists <- sqrt(rowSums((coord_mat[nbrs, , drop = FALSE] -
+                           matrix(coord_mat[i, ], nrow = length(nbrs), ncol = 2, byrow = TRUE))^2))
+  nbrs <- nbrs[dists < (radii[i] + radii[nbrs])]
   if (length(nbrs) == 0) return(NULL)
   cbind(i, nbrs)
 }))
+
+if (is.null(edges)) {
+  edges <- matrix(numeric(0), ncol = 2)
+}
 
 g <- igraph::graph_from_data_frame(
   d = as.data.frame(edges),
@@ -59,7 +74,7 @@ g <- igraph::graph_from_data_frame(
 )
 cluster_id <- igraph::components(g)$membership
 
-split_sub <- eval.dat$split[has_coords]
+split_sub <- eval.dat$split[has_spatial]
 violating_local <- logical(length(cluster_id))
 for (cl in unique(cluster_id)) {
   members <- which(cluster_id == cl)
@@ -70,15 +85,21 @@ for (cl in unique(cluster_id)) {
     violating_local[test_members] <- TRUE
   }
 }
-eval.dat$violates_independence[has_coords] <- violating_local
+eval.dat$violates_independence[has_spatial] <- violating_local
 
 violating_ids <- eval.dat %>% filter(violates_independence) %>% pull(image_id)
-n_missing_coords <- sum(!has_coords & eval.dat$split == "test", na.rm = TRUE)
+n_missing_spatial <- sum(!has_spatial & eval.dat$split == "test", na.rm = TRUE)
 
-cat(length(violating_ids), "test image(s) violate the", SPATIAL_RADIUS_M, "m independence assumption:\n")
+cat(
+  length(violating_ids),
+  "test image(s) violate the depth-based FoV footprint independence assumption:\n"
+)
 print(violating_ids)
-if (n_missing_coords > 0) {
-  cat(n_missing_coords, "test image(s) lack usable GPS coordinates and could not be checked.\n")
+if (n_missing_spatial > 0) {
+  cat(
+    n_missing_spatial,
+    "test image(s) lack usable GPS/depth and could not be checked.\n"
+  )
 }
 # ---------------------------------------------------------------------------
 

@@ -19,7 +19,7 @@ from config import (
 
     TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR, PATIENCE,
 
-    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE, SPATIAL_RADIUS, IMG_SIZE
+    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE, SPATIAL_RADIUS, CAMERA_HFOV_DEG, IMG_SIZE
 )
 
 import os
@@ -39,7 +39,7 @@ from scipy.spatial import cKDTree
 from skopt.space import Real, Integer, Categorical
 from sklearn.model_selection import train_test_split
 
-get_image_id = lambda path: path.split("\\")[-1].split("_")[0]
+get_image_id = lambda path: os.path.basename(path).split("_")[0]
 
 def union_mask(mask_list, shape=IMG_SIZE):
     """OR's together a list of boolean masks into a single mask of `shape`."""
@@ -76,60 +76,49 @@ def pixel_confusion_metrics(true_mask, pred_mask):
     recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
     return tp, fp, fn, iou, dice, precision, recall
 
-def enforce_spatial_independence(train_images, test_images, metadata, radius=SPATIAL_RADIUS):
+def fov_radius_m(depth, hfov_deg=CAMERA_HFOV_DEG):
     """
-    Removes spatial leakage between the train/test split: any image within
-    `radius` meters of an image in the opposite split is reassigned to the
-    train set, since the coral cover in overlapping/adjacent photos is
-    correlated and would otherwise violate the train/test independence
-    assumption.
-
-    Rather than the naive O(N^2) all-pairs distance check, this builds a
-    KD-tree over the (projected, meter-scale) UTM coordinates and uses
-    `cKDTree.query_pairs`, which only examines spatially nearby candidates
-    (O(N log N) for images spread out over a reef transect, versus
-    N*(N-1)/2 for brute force). Images are then grouped into connected
-    "overlap clusters" (via union-find over the close pairs) rather than
-    checked pairwise one at a time: if any single image in a cluster were
-    left in test while another stayed in train, they'd still leak into each
-    other transitively, so any cluster touching both splits is folded
-    entirely into train.
+    Nadir GoPro footprint radius on the seafloor (meters) from water depth.
 
     Args:
-        train_images (list): training image paths.
-        test_images (list): test image paths.
-        metadata (pd.DataFrame): must contain 'image_id', 'NorthPhoto_UTM',
-            'EastPhoto_UTM' columns.
-        radius (float): exclusion radius in meters. If None, returns the
-            split unchanged.
+        depth (float): Depth_WaterSurface in meters (may be negative in metadata).
+        hfov_deg (float): Full horizontal field of view in degrees.
 
     Returns:
-        train_images (list), test_images (list): the adjusted split.
+        float: Footprint radius in meters, or NaN if depth is missing.
     """
-    if radius is None:
-        return train_images, test_images
+    if depth is None or (isinstance(depth, float) and np.isnan(depth)):
+        return float("nan")
+    return abs(float(depth)) * np.tan(np.radians(hfov_deg / 2))
 
-    all_images = train_images + test_images
-    image_ids = [get_image_id(path) for path in all_images]
-    split = np.array(["train"] * len(train_images) + ["test"] * len(test_images))
+def build_overlap_components(coords, radii):
+    """
+    Group images whose seafloor footprints overlap (dist < r_i + r_j).
 
-    coords = (
-        metadata.set_index("image_id")[["NorthPhoto_UTM", "EastPhoto_UTM"]]
-        .reindex(image_ids)
-        .to_numpy(dtype=float)
-    )
+    Uses a KD-tree broad phase (pairs within 2 * max(r)) then filters to the
+    variable-radius overlap rule, and union-find for connected components.
 
-    valid = ~np.isnan(coords).any(axis=1)
-    n_missing = int((~valid).sum())
-    if n_missing and VERBOSE:
-        print(f"Warning: {n_missing} image(s) have no usable GPS coordinates in metadata "
-              f"and cannot be spatially checked; leaving their split assignment unchanged.")
+    Args:
+        coords (np.ndarray): (N, 2) UTM coordinates.
+        radii (np.ndarray): (N,) footprint radius per image in meters.
 
-    valid_idx = np.where(valid)[0]
-    tree = cKDTree(coords[valid_idx])
-    close_pairs = tree.query_pairs(r=radius)  # indices are local to valid_idx
+    Returns:
+        list[list[int]]: Connected components as lists of local indices.
+    """
+    n = len(coords)
+    if n == 0:
+        return []
+    if n == 1:
+        return [[0]]
 
-    parent = list(range(len(valid_idx)))
+    max_r = float(np.max(radii))
+    if max_r <= 0:
+        return [[i] for i in range(n)]
+
+    tree = cKDTree(coords)
+    broad_pairs = tree.query_pairs(r=2 * max_r)
+
+    parent = list(range(n))
 
     def find(i):
         while parent[i] != i:
@@ -142,27 +131,140 @@ def enforce_spatial_independence(train_images, test_images, metadata, radius=SPA
         if ri != rj:
             parent[ri] = rj
 
-    for i, j in close_pairs:
-        union(i, j)
+    for i, j in broad_pairs:
+        if np.linalg.norm(coords[i] - coords[j]) < radii[i] + radii[j]:
+            union(i, j)
 
     clusters = defaultdict(list)
-    for local_i in range(len(valid_idx)):
-        clusters[find(local_i)].append(valid_idx[local_i])
+    for i in range(n):
+        clusters[find(i)].append(i)
+
+    return list(clusters.values())
+
+def assign_components_to_split(components, n_target_test, rng):
+    """
+    Assign overlap components to test so total test count is closest to target.
+
+    Components are shuffled for randomness, then processed smallest-first so
+    small components can fine-tune the final test count.
+
+    Args:
+        components (list[list[int]]): Each inner list is image indices in one component.
+        n_target_test (int): Desired number of test images.
+        rng (np.random.Generator): Random number generator.
+
+    Returns:
+        set[int]: Global image indices assigned to test.
+    """
+    if not components:
+        return set()
+
+    comps = [list(c) for c in components]
+    rng.shuffle(comps)
+    comps.sort(key=len)
+
+    test_indices = set()
+    for comp in comps:
+        new_count = len(test_indices) + len(comp)
+        old_diff = abs(len(test_indices) - n_target_test)
+        new_diff = abs(new_count - n_target_test)
+        if new_diff <= old_diff:
+            test_indices.update(comp)
+
+    return test_indices
+
+def _spatial_radii_for_images(image_ids, metadata, radius=SPATIAL_RADIUS, hfov_deg=CAMERA_HFOV_DEG):
+    """
+    Per-image footprint radii and validity mask for spatial hold-out.
+
+    When `radius` is set, all valid-coordinate images use that uniform radius.
+    Otherwise radii come from depth via `fov_radius_m`.
+    """
+    meta = metadata.set_index("image_id")
+    depths = meta["Depth_WaterSurface"].reindex(image_ids).to_numpy(dtype=float)
+
+    if radius is not None:
+        radii = np.full(len(image_ids), float(radius))
+        valid = ~np.isnan(radii)
+    else:
+        radii = np.array([fov_radius_m(d, hfov_deg) for d in depths], dtype=float)
+        valid = ~np.isnan(radii)
+
+    return radii, valid
+
+def enforce_spatial_independence(
+    train_images,
+    test_images,
+    metadata,
+    radius=SPATIAL_RADIUS,
+    hfov_deg=CAMERA_HFOV_DEG,
+):
+    """
+    Removes spatial leakage between an existing train/test split: any overlap
+    component (footprints with dist < r_i + r_j, transitively) that touches
+    both splits is folded entirely into train.
+
+    Prefer `hold_out()` for new splits; this function adjusts a pre-existing
+    random split using the same overlap rules.
+
+    Args:
+        train_images (list): training image paths.
+        test_images (list): test image paths.
+        metadata (pd.DataFrame): must contain 'image_id', 'NorthPhoto_UTM',
+            'EastPhoto_UTM', and (unless radius is set) 'Depth_WaterSurface'.
+        radius (float): Optional uniform radius override in meters. If None,
+            depth-based FoV radii are used.
+        hfov_deg (float): Horizontal FoV when using depth-based radii.
+
+    Returns:
+        train_images (list), test_images (list): the adjusted split.
+    """
+    if radius is None and hfov_deg is None:
+        return train_images, test_images
+
+    all_images = train_images + test_images
+    image_ids = [get_image_id(path) for path in all_images]
+    split = np.array(["train"] * len(train_images) + ["test"] * len(test_images))
+
+    coords = (
+        metadata.set_index("image_id")[["NorthPhoto_UTM", "EastPhoto_UTM"]]
+        .reindex(image_ids)
+        .to_numpy(dtype=float)
+    )
+    radii, radius_valid = _spatial_radii_for_images(image_ids, metadata, radius, hfov_deg)
+    valid = (~np.isnan(coords).any(axis=1)) & radius_valid
+
+    n_missing = int((~valid).sum())
+    if n_missing and VERBOSE:
+        print(
+            f"Warning: {n_missing} image(s) have no usable GPS/depth in metadata "
+            f"and cannot be spatially checked; leaving their split assignment unchanged."
+        )
+
+    valid_idx = np.where(valid)[0]
+    if len(valid_idx) == 0:
+        return train_images, test_images
+
+    components = build_overlap_components(coords[valid_idx], radii[valid_idx])
+    local_to_global = {local: valid_idx[local] for local in range(len(valid_idx))}
 
     new_split = split.copy()
     n_reassigned = 0
-    for members in clusters.values():
-        if len(members) < 2:
+    for comp in components:
+        if len(comp) < 2:
             continue
-        if len(set(new_split[members])) > 1:
-            for m in members:
+        global_members = [local_to_global[local_i] for local_i in comp]
+        if len(set(new_split[global_members])) > 1:
+            for m in global_members:
                 if new_split[m] != "train":
                     new_split[m] = "train"
                     n_reassigned += 1
 
     if n_reassigned and VERBOSE:
-        print(f"Reassigned {n_reassigned} test image(s) to train: within {radius}m of a "
-              f"spatially connected train image.")
+        print(
+            f"Reassigned {n_reassigned} test image(s) to train: overlapping footprint "
+            f"with a spatially connected train image."
+        )
 
     new_train = [all_images[i] for i in range(len(all_images)) if new_split[i] == "train"]
     new_test = [all_images[i] for i in range(len(all_images)) if new_split[i] == "test"]
@@ -187,35 +289,90 @@ def load_data(file_path):
     else:
         raise ValueError(f"Unsupported file extension: {ext}")
 
-def hold_out(images, val_size=VAL_SIZE, seed=42, metadata_path=METADATA, radius=SPATIAL_RADIUS):
+def hold_out(
+    images,
+    val_size=VAL_SIZE,
+    seed=42,
+    metadata_path=METADATA,
+    radius=SPATIAL_RADIUS,
+    hfov_deg=CAMERA_HFOV_DEG,
+):
     """
-    Splits a list of images into training and validation sets, then, if
-    `metadata_path` and `radius` are set, folds any test image within
-    `radius` meters of a train image back into train so the split doesn't
-    violate the train/test independence assumption (see
-    `enforce_spatial_independence`).
+    Splits images into train and test, enforcing spatial independence via
+    non-overlapping GoPro footprints (dist >= r_train + r_test).
+
+    Overlap components (transitively linked footprints) are assigned entirely
+    to train or test via randomized component selection targeting `val_size`,
+    rather than demoting test images after a random split.
 
     Args:
         images (list): List of image paths.
-        val_size (float): Proportion of images to reserve for validation.
+        val_size (float): Proportion of images to reserve for test.
         seed (int): Random seed for reproducibility.
-        metadata_path (str): Path to the metadata file with GPS coordinates.
-            Set to None to skip spatial conditioning.
-        radius (float): Exclusion radius in meters. Set to None to skip
-            spatial conditioning.
+        metadata_path (str): Path to metadata with UTM coords and depth.
+            Set to None to skip spatial conditioning (plain random split).
+        radius (float): Optional uniform radius override in meters. If None,
+            depth-based FoV radii from `hfov_deg` are used.
+        hfov_deg (float): Horizontal FoV when using depth-based radii.
 
     Returns:
         train_images (list), val_images (list)
     """
-    train_images, val_images = train_test_split(
-        images, test_size=val_size, random_state=seed, shuffle=True
-    )
+    use_spatial = metadata_path is not None and (radius is not None or hfov_deg is not None)
+    if not use_spatial:
+        train_images, val_images = train_test_split(
+            images, test_size=val_size, random_state=seed, shuffle=True
+        )
+        return train_images, val_images
 
-    if metadata_path is not None and radius is not None:
-        metadata = load_data(metadata_path)
-        metadata["image_id"] = metadata["filename"].str.split(".").str[0]
-        train_images, val_images = enforce_spatial_independence(
-            train_images, val_images, metadata, radius=radius
+    metadata = load_data(metadata_path)
+    metadata["image_id"] = metadata["filename"].str.split(".").str[0]
+
+    image_ids = [get_image_id(path) for path in images]
+    coords = (
+        metadata.set_index("image_id")[["NorthPhoto_UTM", "EastPhoto_UTM"]]
+        .reindex(image_ids)
+        .to_numpy(dtype=float)
+    )
+    radii, radius_valid = _spatial_radii_for_images(image_ids, metadata, radius, hfov_deg)
+    coord_valid = ~np.isnan(coords).any(axis=1)
+    spatial_valid = coord_valid & radius_valid
+
+    n_missing = int((~spatial_valid).sum())
+    if n_missing and VERBOSE:
+        print(
+            f"Warning: {n_missing} image(s) have no usable GPS/depth in metadata "
+            f"and cannot be spatially constrained; assigning them without overlap checks."
+        )
+
+    rng = np.random.default_rng(seed)
+    n_target_test = int(round(len(images) * val_size))
+    components = []
+
+    valid_idx = np.where(spatial_valid)[0]
+    if len(valid_idx) > 0:
+        overlap_comps = build_overlap_components(coords[valid_idx], radii[valid_idx])
+        for comp in overlap_comps:
+            components.append([valid_idx[local_i] for local_i in comp])
+
+    for i in np.where(~spatial_valid)[0]:
+        components.append([int(i)])
+
+    test_index_set = assign_components_to_split(components, n_target_test, rng)
+    val_images = [images[i] for i in sorted(test_index_set)]
+    train_images = [images[i] for i in range(len(images)) if i not in test_index_set]
+
+    n_test = len(val_images)
+    if VERBOSE:
+        print(
+            f"Spatial hold-out: {len(components)} component(s), "
+            f"target test={n_target_test}, actual test={n_test} "
+            f"({100 * n_test / len(images):.1f}%)."
+        )
+    if abs(n_test - n_target_test) > 0 and VERBOSE:
+        print(
+            f"Warning: could not reach target test size {n_target_test} "
+            f"under spatial constraints (got {n_test})."
         )
 
     return train_images, val_images

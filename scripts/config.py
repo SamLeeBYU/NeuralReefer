@@ -94,8 +94,10 @@ SAVE_IMG = False
 FIG_SIZE = (16, 9)
 #Data from yellowfin to be merged with prediction metric data
 METADATA = "data/metadata/Day3_Photo_MetaData_sr4.xlsx"
-#Minimum distance (in meters, matching the metadata's UTM coordinates) required between any
-#train image and any test image. Images closer than this to an image in the opposite split
-#are folded into the train set so the train/test independence assumption isn't violated by
-#overlapping/adjacent photos. Set to None to disable this check.
-SPATIAL_RADIUS = 2.0
+#GoPro max horizontal field of view (degrees). Used with Depth_WaterSurface to compute each
+#image's nadir footprint radius: |depth| * tan(CAMERA_HFOV_DEG / 2). Train and test images
+#must not have overlapping footprints (center distance >= r_train + r_test).
+CAMERA_HFOV_DEG = 89.0
+#Optional legacy override: uniform exclusion radius in meters for all images instead of
+#depth-based FoV radii. Set to None to use CAMERA_HFOV_DEG + depth (default).
+SPATIAL_RADIUS = None
