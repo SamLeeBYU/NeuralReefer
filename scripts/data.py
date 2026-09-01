@@ -117,33 +117,30 @@ class MaskLoader(Dataset):
 
         labels_np = torch.argmax(self.labels, dim=1).numpy()
         class_counts = np.bincount(labels_np)
-        new_imgs = []
-        new_labels = []
 
         index_to_class = {v: k for k, v in self.classes.items()}
+        all_sampled_idx = []
         for class_idx, count in enumerate(class_counts):
             if count >= class_cap:
                 continue
 
             indices = np.where(labels_np == class_idx)[0]
             needed = class_cap - count
+            print(f"Oversampling class {index_to_class.get(class_idx, class_idx)}: +{needed}")
 
-            sampled_idx = np.random.choice(indices, size=needed, replace=True)
+            all_sampled_idx.append(np.random.choice(indices, size=needed, replace=True))
 
-            for i in tqdm(range(needed), desc=f"Oversampling class {index_to_class.get(class_idx, class_idx)}"):
-                img = self.raw_data[sampled_idx[i]]
-                label = self.labels[sampled_idx[i]]
+        if all_sampled_idx:
+            # Gather every sampled image/label in one shot via fancy indexing instead of
+            # a per-image Python loop of individual indexing + list.append() + torch.stack --
+            # the vectorized gather below does the same work as a single C-level op.
+            sampled_idx = torch.from_numpy(np.concatenate(all_sampled_idx))
 
-                new_imgs.append(img)
-                new_labels.append(label)
-
-        if new_imgs:
-            new_imgs_batch = torch.stack(new_imgs)     # Shape: [B, C, H, W]
-            new_labels_batch = torch.stack(new_labels) # Shape: [B, K]
+            new_imgs_batch = self.raw_data[sampled_idx]   # Shape: [B, C, H, W]
+            new_labels_batch = self.labels[sampled_idx]   # Shape: [B, K]
 
             new_augmented_imgs = self.augment(new_imgs_batch, self.transform_fn)
 
-            #Concatenating torch tensors is computationally expensive. Consider changing in the future
             self.raw_data = torch.cat([self.raw_data, new_imgs_batch])
             self.img_data = torch.cat([self.img_data, new_augmented_imgs])
             self.labels   = torch.cat([self.labels, new_labels_batch])
