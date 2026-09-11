@@ -141,8 +141,8 @@ print(
 )
 # ---------------------------------------------------------------------------
 
-# Report the effect of removing the independence violators, now including
-# the derived IoU/Dice/F1 metrics alongside the existing accuracy/bias ones.
+# Reports the effect of removing independence violators, including IoU/Dice/F1
+# alongside accuracy/bias metrics.
 summarize_independence_effect <- function(df, label) {
   df$big_mask <- (abs(df$accuracy - df$coral_cover) <= 0.1) & df$coral_cover < 0.1
   out <- tibble(
@@ -503,6 +503,95 @@ plot_confusion_heatmap(cm_genus, "Genus Discrimination", "confusion_matrix_genus
 plot_confusion_heatmap(cm_bleach_coral_only, "Bleaching Discrimination (coral-only)", "confusion_matrix_bleaching.png")
 ################################################################################
 
+# ---- Ensemble weight heatmaps (one per ensemble_method) --------------------
+# Reproduces figures/paper/ensemble_interpretable_weights_heatmap.png's
+# style ("Ensemble Responsibility by Class") for every fitted ensemble
+# method in data/performance/ensemble_weights.csv (see
+# scripts/export_ensemble_weights.py, which must be re-run after
+# scripts/retrain_ensemble.py to refresh this CSV). The underlying quantity
+# differs by method -- these three (em/adam/reweight) are latent-class
+# mixtures with a genuine per-example responsibility, matching the original
+# figure exactly; multinomial/linear/nn don't have that structure, so each
+# gets the closest natural per-(model, class) quantity for its own
+# parameterization instead (see that script's docstring) -- titled and
+# color-scaled accordingly rather than mislabeled as "responsibility".
+
+ensemble_dir <- "figures/ensemble"
+dir.create(ensemble_dir, showWarnings = FALSE, recursive = TRUE)
+
+ew <- read_csv("data/performance/ensemble_weights.csv", show_col_types = FALSE)
+
+pretty_class_name <- function(x) {
+  is_bleached <- str_detect(x, ":bleached$")
+  is_healthy  <- str_detect(x, ":healthy$")
+  base <- str_remove(x, ":(bleached|healthy)$")
+  base <- str_remove(base, "_$")                 # trailing underscore (mounding_, pocillopora_)
+  base <- str_to_title(str_replace_all(base, "_", " "))
+  base[base == "Noncoral"] <- "Non-Coral"
+  out <- base
+  out[is_bleached] <- paste0(base[is_bleached], " (Bleached)")
+  out[is_healthy]  <- paste0(base[is_healthy], " (Healthy)")
+  out
+}
+
+ensemble_method_titles <- c(
+  em          = "Ensemble Responsibility by Class (EM)",
+  adam        = "Ensemble Responsibility by Class (Adam)",
+  reweight    = "Ensemble Responsibility by Class (Reweight)",
+  multinomial = "Per-Submodel Calibration Weight by Class (Multinomial)",
+  linear      = "Per-Submodel Self-Weight by Class (Linear)",
+  nn          = "Per-Submodel Input Sensitivity by Class (Neural Net, Approx.)"
+)
+
+plot_ensemble_weights <- function(method_df, method_name) {
+  has_share <- !all(is.na(method_df$model_share))
+
+  model_labels <- method_df %>%
+    distinct(model, model_share) %>%
+    arrange(model) %>%
+    mutate(label = if (has_share) sprintf("Model %d (%.2f%%)", model, 100 * model_share)
+                   else sprintf("Model %d", model))
+
+  df <- method_df %>%
+    mutate(
+      class_label = pretty_class_name(class_name),
+      class_label = factor(class_label, levels = unique(class_label[order(class_name)])),
+      model_label = factor(model_labels$label[model], levels = model_labels$label),
+      # White text on the darker (upper-half-of-THIS-plot's-own-range) tiles,
+      # black otherwise -- each method has its own value range, so the
+      # threshold is relative to this plot's own min/max, not a fixed cutoff.
+      text_color = ifelse(value > (min(value) + max(value)) / 2, "white", "black")
+    )
+
+  p <- ggplot(df, aes(x = class_label, y = model_label, fill = value)) +
+    geom_tile(color = "white", linewidth = 0.6) +
+    geom_text(aes(label = sprintf("%.2f", value), color = text_color),
+              family = "cm", size = 7.5, show.legend = FALSE) +
+    scale_color_identity() +
+    labs(title = ensemble_method_titles[[method_name]], x = NULL, y = NULL, fill = NULL) +
+    nf.theme +
+    theme(
+      axis.text.x = element_text(angle = 60, hjust = 1, size = rel(1.0)),
+      axis.text.y = element_text(size = rel(1.1)),
+      panel.grid = element_blank(),
+      legend.position = "none"
+    )
+
+  # One consistent sequential palette across all six methods (a diverging
+  # scale isn't informative here since the fitted values don't straddle a
+  # natural midpoint for every method).
+  p <- p + scale_fill_distiller(palette = "YlGnBu", direction = 1)
+
+  ggsave(filename = file.path(ensemble_dir, sprintf("ensemble_weights_%s.png", method_name)),
+         plot = p, width = 14, height = 6, dpi = dpi_val)
+  p
+}
+
+for (m in unique(ew$method)) {
+  plot_ensemble_weights(ew %>% filter(method == m), m)
+}
+################################################################################
+
 # --- F1 / Dice / Jaccard for each submodel + the ensemble, from model_performance.txt ---
 # Like the confusion-matrix section above (and unlike the pixel-level LCC
 # IoU section), this is an instance-count metric, not a spatial one -- so it
@@ -582,14 +671,13 @@ cat(sprintf(
 
 # --- Per-taxonomy PIXEL-level IoU/Dice/precision/recall, macro-averaged, ---
 # --- with bootstrap confidence intervals                                 ---
-# This is the genuine spatial-overlap IoU (a reviewer asking for "IoU, Dice,
-# F1, per-class precision/recall, macro-averaged metrics, and confidence
-# intervals" on segmentation quality means THIS section, not the
-# instance-count Jaccard from confusion_matrix.txt above) -- computed by
-# scripts/train.py's eval loop directly from predicted vs. ground-truth
-# masks (see pixel_confusion_metrics/union_mask/taxonomy_records there),
-# one row per (image, taxonomy). Requires running that eval loop at least
-# once; this section no-ops with a message if the CSV isn't there yet.
+# Genuine spatial-overlap IoU/Dice/precision/recall per taxonomy, macro-
+# averaged with bootstrap CIs -- NOT the instance-count Jaccard from
+# confusion_matrix.txt above. Computed by scripts/train.py's eval loop
+# directly from predicted vs. ground-truth masks (see
+# pixel_confusion_metrics/union_mask/taxonomy_records there), one row per
+# (image, taxonomy). Requires running that eval loop at least once; this
+# section no-ops with a message if the CSV isn't there yet.
 
 TAXONOMY_METRICS_PATH <- "data/performance/coral_segmenter_taxonomy_metrics.v.1.0.csv"
 

@@ -24,12 +24,13 @@ from sklearn.metrics import roc_auc_score, confusion_matrix
 
 from utils import convert_json_compat
 from data import MaskLoader
-from classifier import CoralClassifier, EMEnsembleOptimizer, FocalLoss, create_loss_fn
+from classifier import CoralClassifier, EMEnsembleOptimizer, LinearStackingOptimizer, AdamEnsembleOptimizer, ClassReweightingOptimizer, MultinomialRegressionOptimizer, NeuralNetEnsembleOptimizer, FocalLoss, create_loss_fn
 
 from config import (
-    VERBOSE, MASK_SIZE, FILTER_MODELS_DIR, CLASSES_FILE, PATIENCE, RES, NEG_WEIGHT, ENSEMBLE_SPLIT
+    VERBOSE, MASK_SIZE, FILTER_MODELS_DIR, CLASSES_FILE, PATIENCE, RES, NEG_WEIGHT, ENSEMBLE_SPLIT,
+    N_STARTS, ENSEMBLE_METHOD, ABLATION_SUBMODEL, MASK_TRANSFORM_AUGMENT_SEED
 )
-from transforms import MASK_TRANSFORM, MASK_TRANSFORM_AUGMENT
+from transforms import MASK_TRANSFORM_AUGMENT, seeded_rng
 
 class CoralFilter:
 
@@ -57,11 +58,9 @@ class CoralFilter:
         bootstrap (bool): If True, resample training data with replacement.
     """
 
-    def __init__(self, model: CoralClassifier, dataset: MaskLoader, device=None, loss_fn=nn.CrossEntropyLoss(), epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.3, train=True, seed=42, bootstrap=False):
+    def __init__(self, model: CoralClassifier, dataset: MaskLoader, device=None, loss_fn=nn.CrossEntropyLoss(), epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.3, train=True, seed=42, bootstrap=False, train_idx=None, val_idx=None):
 
         self.device = device or (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
-        # if VERBOSE:
-        #     print(f"using device: {self.device}")
         self.model = model.to(self.device)
 
         self.loss_fn = loss_fn
@@ -79,16 +78,28 @@ class CoralFilter:
         self.noncoral_class = self.classes['noncoral']
 
         if train:
-            train_idx, val_idx = train_test_split(
-                np.arange(len(dataset)),
-                test_size = split,
-                stratify = self.dataset.labels.numpy(),
-                #It is imperative that each of these submodels are trained on a bootstrapped distribution
-                #of the *same* training data to appropriately explore the sampling distribution
-                random_state=seed
-            )
-            #array([45836, 65131, 20203, ..., 54551, 34767, 67438], shape=(51338,))
-            #array([50013, 25265, 32029, ..., 29129, 63953, 48043], shape=(22003,))
+            if train_idx is None or val_idx is None:
+                # Fallback for standalone use (no explicit split passed in) -- stratifies on
+                # the raw one-hot label array, which does NOT produce the same partition as
+                # CoralFilterEnsembler.train_ensemble()'s stratify=argmax(labels) call (sklearn's
+                # StratifiedShuffleSplit consumes its random_state differently depending on that
+                # representation). Callers that need this split to agree with the ensembler's
+                # held-out pool -- i.e. CoralFilterEnsembler.train() -- MUST pass train_idx/val_idx
+                # explicitly (see CoralFilterEnsembler._submodel_pool_split).
+                train_idx, val_idx = train_test_split(
+                    np.arange(len(dataset)),
+                    test_size = split,
+                    stratify = self.dataset.labels.numpy(),
+                    #Each submodel must be trained on a bootstrapped resample of the SAME pool
+                    #to properly explore the sampling distribution
+                    random_state=seed
+                )
+
+            # The pre-bootstrap pool this submodel was allowed to draw from, and its
+            # complementary held-out pool -- stored so callers/tests can verify disjointness
+            # against other submodels/the ensembler without reaching into DataLoader internals.
+            self.train_pool_idx = np.asarray(train_idx)
+            self.val_idx = np.asarray(val_idx)
 
             if bootstrap:
                 train_idx = np.random.choice(train_idx, size=len(train_idx), replace=True)
@@ -231,6 +242,10 @@ class CoralFilter:
     def predict(self, masks, img = None, img_path: str = None, mask_size=None, transform_fn=None):
 
         mask_size = mask_size or MASK_SIZE
+        # MASK_TRANSFORM_AUGMENT, not the deterministic MASK_TRANSFORM: every submodel is
+        # only ever trained under MASK_TRANSFORM_AUGMENT, so a plain resize with no crop
+        # is out-of-distribution for them. Reproducibility comes from the caller wrapping
+        # this in transforms.seeded_rng -- see CoralFilterEnsembler.predict/extract_submodel_logits.
         transform_fn = transform_fn or MASK_TRANSFORM_AUGMENT
 
         if img_path is not None:
@@ -256,22 +271,56 @@ class CoralFilter:
         self.model = self.model.to(self.device)
         self.model.eval()
 
+def _binary_coral_metrics(y_true_idx, y_pred_idx, noncoral_class):
+    """Accuracy over all classes, plus precision/recall/F2 for the coral vs.
+    noncoral binary sub-problem. Duplicated from
+    generate_filter_reports.binary_coral_metrics (not imported -- that
+    script already imports FROM this module, so importing back would invert
+    the dependency) so extract_submodel_logits can print a per-submodel
+    sanity check as each one finishes, rather than only after all finish."""
+    total = len(y_true_idx)
+    accuracy = (y_pred_idx == y_true_idx).sum() / total if total > 0 else 0.0
+
+    is_coral_true = y_true_idx != noncoral_class
+    is_coral_pred = y_pred_idx != noncoral_class
+
+    tp = int(np.logical_and(is_coral_true, is_coral_pred).sum())
+    fn = int(np.logical_and(is_coral_true, ~is_coral_pred).sum())
+    fp = int(np.logical_and(~is_coral_true, is_coral_pred).sum())
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f2 = 5 * precision * recall / (4 * precision + recall) if (4 * precision + recall) > 0 else 0.0
+
+    return accuracy, precision, recall, f2
+
+
 def extract_submodel_logits(models, dataset, k, batch_size=128, cache_path=None,
-                             use_cache=True, verbose=True):
+                             use_cache=True, verbose=True, seed=MASK_TRANSFORM_AUGMENT_SEED):
     """
     Forward-passes every model in `models` over the ENTIRE `dataset` (all
-    samples, not a subset), using the deterministic MASK_TRANSFORM (not the
-    training-time MASK_TRANSFORM_AUGMENT) -- sets dataset.transform_fn and
-    calls dataset.resample() internally -- so re-running this reproduces the
-    same numbers every time.
+    samples, not a subset), using MASK_TRANSFORM_AUGMENT (not the
+    deterministic MASK_TRANSFORM) -- every submodel is only ever trained
+    under MASK_TRANSFORM_AUGMENT, so the deterministic transform is
+    out-of-distribution for them. Reproducibility comes from `seed` (via
+    transforms.seeded_rng), not from the transform being deterministic.
+
+    Applies the transform to each mask individually (working from
+    dataset.raw_data/raw_idx directly, not dataset.img_data/resample()) so
+    every mask gets its own independent random draw, matching live
+    inference's per-mask granularity (CoralFilter.predict -> MaskLoader.extract)
+    rather than resample()'s chunked batch-transform, which shares one draw
+    across an entire chunk. Each submodel gets its own continuing draw
+    within the one seeded_rng scope below, matching
+    CoralFilterEnsembler.predict()'s live-inference behavior.
 
     This is the expensive step shared by CoralFilterEnsembler.train_ensemble()
     and scripts/generate_filter_reports.py: each only needs a different
-    index-based slice of the SAME full-dataset logits (train_ensemble()'s
-    30% ensemble pool is a strict subset of generate_filter_reports.py's
-    70/30 split of the whole dataset), not a different computation. Both
-    can point cache_path at the same file, so only the first of the two to
-    run ever pays this cost.
+    index-based slice of the SAME full-dataset logits, not a different
+    computation, so both can point cache_path at the same file and only the
+    first to run pays this cost. NOTE: a cache built under a different
+    transform is silently stale (same shape, wrong values) -- delete it or
+    pass use_cache=False if the transform changes.
 
     Args:
         models (list[CoralFilter]): the trained, frozen submodels.
@@ -281,6 +330,8 @@ def extract_submodel_logits(models, dataset, k, batch_size=128, cache_path=None,
             None disables caching.
         use_cache (bool): set False to force recomputation even if a cache
             file exists (e.g. after retraining a submodel).
+        seed (int): seeds MASK_TRANSFORM_AUGMENT for reproducibility;
+            defaults to config.MASK_TRANSFORM_AUGMENT_SEED.
 
     Returns:
         logits ([N, len(models), k] float32), y_true ([N] int),
@@ -302,21 +353,38 @@ def extract_submodel_logits(models, dataset, k, batch_size=128, cache_path=None,
             )
         return logits, y_true
 
-    dataset.transform_fn = MASK_TRANSFORM
-    dataset.resample()
-
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     N = len(dataset)
     logits = np.zeros((N, len(models), k), dtype=np.float32)
     y_true = np.argmax(dataset.labels.numpy(), axis=1)
+    noncoral_class = dataset.classes.get("noncoral") if hasattr(dataset, "classes") else None
+    raw_idx = dataset.raw_idx  # handles oversampling's repeated indices, same as resample()
 
-    for m, filter_model in tqdm(enumerate(models), "Evaluating models", total=len(models)):
-        filter_model.model.eval()
-        with torch.no_grad():
-            for batch, (X, y) in enumerate(loader):
-                X = X.to(filter_model.device)
-                pred = filter_model.model(X).squeeze(1)
-                logits[batch * batch_size: batch * batch_size + len(X), m, :] = pred.cpu().numpy()
+    with seeded_rng(seed):
+        for m, filter_model in enumerate(tqdm(models, desc="Evaluating models", disable=not verbose)):
+            filter_model.model.eval()
+            with torch.no_grad():
+                batch_bar = tqdm(range(0, N, batch_size), desc=f"Model {m+1}/{len(models)}", leave=False, disable=not verbose)
+                for start in batch_bar:
+                    end = min(start + batch_size, N)
+                    raw_batch = dataset.raw_data[raw_idx[start:end]]
+                    # One independent MASK_TRANSFORM_AUGMENT draw per mask,
+                    # continuing this scope's seeded RNG sequence -- see docstring.
+                    X = torch.stack([MASK_TRANSFORM_AUGMENT(img) for img in raw_batch]).to(filter_model.device)
+                    pred = filter_model.model(X).squeeze(1)
+                    logits[start:end, m, :] = pred.cpu().numpy()
+
+            # Printed as soon as this submodel finishes so a broken submodel
+            # (wrong weights, garbage logits, NaNs) is caught immediately.
+            if verbose:
+                pred_idx_m = np.argmax(logits[:, m, :], axis=1)
+                if noncoral_class is not None:
+                    acc, prec, rec, f2 = _binary_coral_metrics(y_true, pred_idx_m, noncoral_class)
+                    print(f"  Submodel {m+1}/{len(models)} sanity check: "
+                          f"accuracy={acc:.4f} precision={prec:.4f} recall={rec:.4f} F2={f2:.4f}")
+                else:
+                    acc = (pred_idx_m == y_true).mean()
+                    print(f"  Submodel {m+1}/{len(models)} sanity check: accuracy={acc:.4f} "
+                          f"(no 'noncoral' class found on dataset -- skipping precision/recall/F2)")
 
     if cache_path is not None:
         os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
@@ -329,7 +397,7 @@ def extract_submodel_logits(models, dataset, k, batch_size=128, cache_path=None,
 
 class CoralFilterEnsembler:
 
-    def __init__(self, base_dataset: str, base_model = None, device=None, m=5, epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.1, seed=42):
+    def __init__(self, base_dataset: str, base_model = None, device=None, m=5, epochs=15, batch_size=32, lr=1e-3, weight_decay=1e-4, split=0.1, seed=42, ensemble_method=ENSEMBLE_METHOD):
 
         self.device = device or (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
 
@@ -338,27 +406,10 @@ class CoralFilterEnsembler:
         self.mask_data = None
         if self.base_dataset is not None: #e.g. if we're training the model
             self.mask_data = MaskLoader(load_file=self.base_dataset, balance=True)
-            #self.mask_loader = DataLoader(self.mask_data, batch_size=batch_size)
 
             self.classes = self.mask_data.classes
             with open(CLASSES_FILE, 'w') as f:
                 json.dump(self.classes, f, indent=4)
-
-            #Preliminary estimates suggest that our images contain 30-40% coral cover, on average
-            #However, the data that will the models will be trained with is inflated with negative labels to increase sample size (resulting in 80:20 ratio of negative to positive labels)
-            #Note that the inflated data *is* representative of the data that will ultimately be fed into the trained models because of *where* (the stage at which) the model is implemented
-
-            #labels = self.mask_data.labels.numpy()
-            # base_rates = np.mean(labels, axis=0)
-            # weights = 1.0 / base_rates
-            # weights = weights / weights.sum() * len(self.classes)
-            # self.weight = torch.tensor(weights, device=device)
-
-            #self.weight = torch.ones(len(self.classes), device=self.device)
-            #self.weight[self.classes["noncoral"]] = NEG_WEIGHT
-            #self.loss_fn = create_loss_fn(self.weight, use_focal=True, gamma=2.0, reduction='sum')
-
-            #A better accuracy can generally be induced by balancing the weights (as the model regresses to the base rate), but that usually hinders recall
         else:
             with open(CLASSES_FILE, 'r') as f:
                 self.classes = json.load(f)
@@ -374,22 +425,77 @@ class CoralFilterEnsembler:
         self.weight_decay = weight_decay
         self.split = split
         self.seed = seed
+        self.ensemble_method = ensemble_method
 
         self.models = []
-        self.ensemble_model = EMEnsembleOptimizer(self.m, self.k)
+        self.ensemble_model = self._make_ensemble_model()
+        self.last_ablation_proba = None  # set by predict() when config.ABLATION_SUBMODEL is set
 
-    def train(self, ensemble_split=0.1):
+    def _make_ensemble_model(self, method=None):
+        method = method or self.ensemble_method
+        if method == "em":
+            return EMEnsembleOptimizer(self.m, self.k)
+        elif method == "linear":
+            return LinearStackingOptimizer(self.m, self.k)
+        elif method == "adam":
+            return AdamEnsembleOptimizer(self.m, self.k)
+        elif method == "reweight":
+            return ClassReweightingOptimizer(self.m, self.k)
+        elif method == "multinomial":
+            return MultinomialRegressionOptimizer(self.m, self.k)
+        elif method == "nn":
+            return NeuralNetEnsembleOptimizer(self.m, self.k)
+        else:
+            raise ValueError(f"Unknown ensemble_method '{method}' (expected 'em', 'linear', 'adam', 'reweight', 'multinomial', or 'nn').")
+
+    def _submodel_pool_split(self, legacy=False):
+        """
+        The single, authoritative 70/30 split between the submodels' own
+        training pool and the pool reserved for the ensemble stage --
+        computed HERE ONLY and reused by both .train() (passed explicitly
+        into every CoralFilter(...) it creates) and .train_ensemble() (as
+        the ensemble pool), so the two stages cannot disagree about which
+        masks are held out. Stratifying on argmax(labels) (integer class
+        index) here does NOT reproduce the same split as stratifying on the
+        raw one-hot label array (as CoralFilter.__init__'s own fallback
+        split does when no train_idx/val_idx is passed in) -- sklearn's
+        StratifiedShuffleSplit consumes its random_state differently
+        depending on that representation, even with an identical
+        seed/test_size. Passing indices through explicitly (as .train()
+        does) avoids relying on both call sites reconstructing the same split.
+
+        legacy=True reproduces the old stratify=one-hot-labels call instead
+        -- use only when evaluating/retraining the ensemble against
+        submodels that were trained under that split and cannot be
+        retrained. Never use legacy=True for freshly-trained submodels.
+        """
+        y_true = np.argmax(self.mask_data.labels.numpy(), axis=1)
+        stratify = self.mask_data.labels.numpy() if legacy else y_true
+        train_pool_idx, val_pool_idx = train_test_split(
+            np.arange(len(self.mask_data)),
+            test_size=self.split,
+            stratify=stratify,
+            random_state=self.seed,
+        )
+        return train_pool_idx, val_pool_idx
+
+    def train(self, ensemble_split=0.1, n_starts=N_STARTS, ensemble_method=None):
+        train_pool_idx, val_pool_idx = self._submodel_pool_split()
         for i in range(self.m):
             print(f"Creating model {i+1}/{self.m}")
             model_i = CoralFilter(self.base_model(pretrained=True, dim=self.k, res=RES), self.mask_data, self.device,
                                   create_loss_fn(use_focal=False), #Generic CCE loss for each submodule
-                                  batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=True, seed=self.seed, bootstrap=True)
+                                  batch_size=self.batch_size, epochs=self.epochs, lr=self.lr, weight_decay=self.weight_decay, split=self.split, train=True, seed=self.seed, bootstrap=True,
+                                  train_idx=train_pool_idx, val_idx=val_pool_idx)
             model_i.train(patience=PATIENCE)
             self.models.append(model_i)
 
-        self.train_ensemble(ensemble_split)
+        # legacy_split=False: these submodels were just trained on
+        # _submodel_pool_split()'s canonical (non-legacy) pool above, so
+        # train_ensemble() must use that SAME pool, not the legacy one.
+        self.train_ensemble(ensemble_split, n_starts=n_starts, ensemble_method=ensemble_method, legacy_split=False)
 
-    def train_ensemble(self, ensemble_split=ENSEMBLE_SPLIT, cache_path=None, use_cache=True):
+    def train_ensemble(self, ensemble_split=ENSEMBLE_SPLIT, cache_path=None, use_cache=True, n_starts=N_STARTS, ensemble_method=None, legacy_split=False, ensemble_init=None):
         """
         Args:
             ensemble_split (float): fraction of the ensemble-data pool held
@@ -404,7 +510,34 @@ class CoralFilterEnsembler:
             use_cache (bool): set False to force recomputation even if a
                 cache file exists at cache_path (e.g. after retraining a
                 submodel, when the cache would be stale).
+            n_starts (int): number of independent random initializations
+                passed through to fit() on whichever ensemble_model is used
+                -- the best of these by weighted log-likelihood is kept.
+                Ignored for ensemble_method "linear" (a single closed-form
+                solve) and "multinomial" (a single exact Newton solve to a
+                unique global optimum -- see MultinomialRegressionOptimizer)
+                -- neither has anything to restart.
+            ensemble_method (str, optional): "em", "linear", "adam",
+                "reweight", or "multinomial" -- overrides self.ensemble_method
+                (set in __init__, from config.py's ENSEMBLE_METHOD) for this
+                call only. See classifier.py's EMEnsembleOptimizer,
+                LinearStackingOptimizer, AdamEnsembleOptimizer,
+                ClassReweightingOptimizer, and MultinomialRegressionOptimizer.
+            legacy_split (bool): passed through to _submodel_pool_split().
+                Set True ONLY when self.models were loaded (not just
+                trained in this same call) from submodels trained before
+                the split-consistency fix -- see _submodel_pool_split's
+                docstring. A .train() call already sets this correctly
+                (False) when it calls train_ensemble() internally.
+            ensemble_init (tuple(alpha0, W0), optional): passed through to
+                ClassReweightingOptimizer.fit()'s `init` argument -- an
+                EXTRA starting point run alongside the usual n_starts random
+                restarts (not instead of them), see that method's docstring.
+                Only meaningful for ensemble_method == "reweight" (the only
+                method whose fit() accepts it); ignored otherwise.
         """
+        if ensemble_method is not None:
+            self.ensemble_method = ensemble_method
         #Now we weight each model that gives the best OOS ensemble performance
         full_logits, full_y_true = extract_submodel_logits(
             self.models, self.mask_data, self.k,
@@ -412,12 +545,7 @@ class CoralFilterEnsembler:
         )
 
         #We need to train the ensembler on the set of data that the submodels have not seen to maintain independence between models
-        _, idx = train_test_split(
-            np.arange(len(self.mask_data)),
-            test_size=self.split,
-            stratify=full_y_true,
-            random_state=self.seed
-        )
+        _, idx = self._submodel_pool_split(legacy=legacy_split)
         logits, y_true = full_logits[idx], full_y_true[idx]
 
         ensemble_train_idx, ensemble_test_idx = train_test_split(
@@ -439,8 +567,33 @@ class CoralFilterEnsembler:
         nu = np.ones(K)
         nu[self.noncoral_class] = NEG_WEIGHT
 
-        self.ensemble_model = EMEnsembleOptimizer(self.m, K)
-        self.ensemble_model.fit(self.X_train, self.y_train_idx, nu, seed=self.seed)
+        self.ensemble_model = self._make_ensemble_model()
+        if self.ensemble_method in ("em", "reweight"):
+            # Both are EM fits with a provably monotonic ascent on the
+            # observed-data log-likelihood within a trajectory (exact
+            # closed-form M-steps for "em"; closed-form alpha + MM
+            # fixed-point W for "reweight" -- see ClassReweightingOptimizer)
+            # -- no overfitting risk to guard against with a held-out check
+            # DURING the fit, unlike "adam" below. self.X_test/self.y_test_idx
+            # stay untouched until validate().
+            fit_kwargs = {"init": ensemble_init} if (self.ensemble_method == "reweight" and ensemble_init is not None) else {}
+            self.ensemble_model.fit(self.X_train, self.y_train_idx, nu, n_starts=n_starts, seed=self.seed, **fit_kwargs)
+        elif self.ensemble_method in ("adam", "nn"):
+            # Unlike "em"/"reweight" above and "linear"/"multinomial" below,
+            # both are non-convex first-order fits (torch.optim.Adam), so
+            # both use held-out early stopping via val_logits/val_y_idx --
+            # self.X_test/self.y_test_idx ARE used during fitting here (for
+            # model selection, not gradient computation), unlike every other
+            # method where that split stays untouched until validate().
+            self.ensemble_model.fit(
+                self.X_train, self.y_train_idx, nu, n_starts=n_starts, seed=self.seed,
+                val_logits=self.X_test, val_y_idx=self.y_test_idx,
+            )
+        else:
+            # "linear" (closed-form) and "multinomial" (single exact Newton
+            # solve to a unique global optimum) both need only one fit call,
+            # no n_starts, no held-out early stopping.
+            self.ensemble_model.fit(self.X_train, self.y_train_idx, nu, seed=self.seed)
 
     def validate(self):
 
@@ -462,27 +615,47 @@ class CoralFilterEnsembler:
 
         print(f"Ensemble model trained with out-of-sample accuracy: {accuracy:.4f}, Recall: {recall:.4f}, Precision: {precision:.4f}")
 
+    # Which arrays each ensemble_method's optimizer is parameterized by -- see
+    # classifier.py for what each one means (EMEnsembleOptimizer/AdamEnsembleOptimizer:
+    # alpha/beta, same multinomial-logit model, fit differently; LinearStackingOptimizer:
+    # W/b, closed-form ridge-regression weights + bias; ClassReweightingOptimizer:
+    # alpha/W, the original Hadamard-reweight-and-renormalize model's mixture
+    # weights + per-submodel positive class-reweight vectors; MultinomialRegressionOptimizer:
+    # beta only -- no alpha, see its docstring). save_models()/load_models()
+    # use this to save/reconstruct the right arrays generically.
+    _ENSEMBLE_PARAM_NAMES = {
+        "em": ("alpha", "beta"),
+        "adam": ("alpha", "beta"),
+        "linear": ("W", "b"),
+        "reweight": ("alpha", "W"),
+        "multinomial": ("beta",),
+        # 3 layers, matching NeuralNetEnsembleOptimizer's default
+        # hidden_sizes=(32, 16) -- MK -> 32 -> 16 -> K. Changing hidden_sizes
+        # would need updating this list to match (number of layers, not
+        # sizes -- shapes are inferred from the saved arrays themselves).
+        "nn": ("W0", "b0", "W1", "b1", "W2", "b2"),
+    }
+
     def save_models(self, dir=None):
         dir = dir or FILTER_MODELS_DIR
         if not os.path.exists(dir):
             os.makedirs(dir)
         for i, model in tqdm(enumerate(self.models), desc="Saving models"):
             model.save_model(os.path.join(dir, f"model_{i+1}.pth"))
-        np.savez(os.path.join(dir, "ensemble.npz"), alpha=self.ensemble_model.alpha, weights=self.ensemble_model.weights)
 
-        # Human-readable export of the same two arrays. Unlike the old
-        # torch-based EnsembleOptimizer (whose raw nn.Parameter values were
-        # pre-softmax and not directly interpretable -- softmax output is
-        # always in (0,1), but the old ensemble_params.json contained
-        # negative numbers, so it must have been dumping the unnormalized
-        # parameters), EMEnsembleOptimizer.alpha/.weights ARE the exact
-        # values used in predict_proba(): alpha sums to 1, each row of
-        # weights sums to 1. So this export is a direct, faithful view of
+        # ensemble_method itself is saved alongside the arrays so load_models()
+        # knows which class (and which arrays) to reconstruct.
+        param_names = self._ENSEMBLE_PARAM_NAMES[self.ensemble_method]
+        params = {name: getattr(self.ensemble_model, name) for name in param_names}
+
+        np.savez(os.path.join(dir, "ensemble.npz"), ensemble_method=self.ensemble_method, **params)
+
+        # Human-readable export of the same arrays -- a direct, faithful view of
         # the fitted ensemble, not merely a raw parameter dump.
         with open(os.path.join(dir, "ensemble_params.json"), "w") as f:
             json.dump({
-                "alpha": np.round(self.ensemble_model.alpha, 4).tolist(),
-                "weights": np.round(self.ensemble_model.weights, 4).tolist(),
+                "ensemble_method": self.ensemble_method,
+                **{k: np.round(v, 4).tolist() for k, v in params.items()},
             }, f, indent=2)
 
     def load_models(self, dir=None, dim=None):
@@ -500,16 +673,42 @@ class CoralFilterEnsembler:
                 model.load_model(model_file)
                 self.models.append(model)
         ensemble_data = np.load(os.path.join(dir, "ensemble.npz"))
-        self.ensemble_model = EMEnsembleOptimizer(self.m, self.k)
-        self.ensemble_model.alpha = ensemble_data["alpha"]
-        self.ensemble_model.weights = ensemble_data["weights"]
+        # str(...) : np.savez stores the ensemble_method string as a 0-d array
+        self.ensemble_method = str(ensemble_data["ensemble_method"]) if "ensemble_method" in ensemble_data else "em"
+        self.ensemble_model = self._make_ensemble_model()
+        for name in self._ENSEMBLE_PARAM_NAMES[self.ensemble_method]:
+            setattr(self.ensemble_model, name, ensemble_data[name])
 
     def predict(self, masks, img=None, img_path: str = None, mask_size=None):
         mask_size = mask_size or MASK_SIZE
         logits = np.zeros((len(masks), self.m, self.k), dtype=np.float32)
-        for m in tqdm(range(self.m), desc="Classifying"):
-            model = self.models[m]
-            logits[:,m,:] = model.predict(masks, img, img_path, mask_size)
+        # Seeded ONCE here (not inside CoralFilter.predict) so the 5 submodels'
+        # MASK_TRANSFORM_AUGMENT draws continue one reproducible sequence
+        # rather than each independently restarting from the same point.
+        with seeded_rng(MASK_TRANSFORM_AUGMENT_SEED):
+            for m in tqdm(range(self.m), desc="Classifying"):
+                model = self.models[m]
+                logits[:,m,:] = model.predict(masks, img, img_path, mask_size)
+
+        # Stashed for diagnostics (e.g. re-running a different ensemble_model's
+        # predict_proba against these SAME raw per-submodel logits).
+        self.last_logits = logits
+
+        # Ablation study (see config.py's ABLATION_SUBMODEL): from this SAME
+        # forward pass, also compute one submodel's own softmax(logits), so a
+        # single CNN can be compared against the full ensemble without a
+        # second inference pass. Stashed as an attribute (read via
+        # SAM2Segmenter.predict) rather than returned, so the ensemble
+        # prediction remains this method's sole return value.
+        self.last_ablation_proba = None
+        if ABLATION_SUBMODEL is not None:
+            # (Not all ensemble_model classes define a _softmax helper --
+            # e.g. LinearStackingOptimizer doesn't -- so this is self-contained
+            # rather than borrowed from self.ensemble_model.)
+            z = logits[:, ABLATION_SUBMODEL - 1, :]
+            z = z - z.max(axis=-1, keepdims=True)
+            e = np.exp(z)
+            self.last_ablation_proba = e / e.sum(axis=-1, keepdims=True)
 
         return self.ensemble_model.predict_proba(logits)
 

@@ -27,11 +27,9 @@ class MaskLoader(Dataset):
         PyTorch dataset class for constructing a labeled image crop dataset for binary coral classification.
 
         Supports two modes: loading preprocessed data from disk or generating it dynamically using a segmentation model.
+        Precomputing the dataset and loading it fully into RAM trades memory for training speed.
 
-        Creating the data set a priori (as is done here) and then loading in the data in the RAM come training comes with its limitations, but
-        in general, greatly speeds up model training times
-
-        Ground truth masks are treated as coral instances pertaining to genus/bleached category (defined in remap.json), while non-overlapping predicted masks are labeled as 'noncoral'.
+        Ground truth masks are labeled by genus/bleached category (defined in remap.json); non-overlapping predicted masks are labeled 'noncoral'.
 
         Args:
             images (List[str], optional): List of image paths to process.
@@ -55,15 +53,13 @@ class MaskLoader(Dataset):
             self._create_dataset(images, tolerance)
 
         if balance:
-            #This helps scale the gradient in our filter models appropriately to learn features of minority classes
+            #Oversamples minority classes so gradient updates aren't dominated by majority classes
             self._oversample(class_cap=UPSAMPLE)
 
     def __len__(self):
-        #Needed for a pytorch data loader
         return len(self.labels)
 
     def __getitem__(self, idx):
-        #Needed for a pytorch data loader
         X_i = self.img_data[idx]
         y_i = self.labels[idx]
         return X_i, y_i
@@ -77,7 +73,7 @@ class MaskLoader(Dataset):
         raw_data = data["img_data"]
 
         reindex = False
-        if reindex: #If you want to exclude classes with very few observations (this may be helpful if there are typos in the data labels)
+        if reindex: #Excludes classes with too few observations to be useful (e.g. label typos)
             label_indices = torch.argmax(labels, dim=1).tolist()
             class_counts = Counter(label_indices)
 
@@ -105,8 +101,9 @@ class MaskLoader(Dataset):
             self.raw_data = raw_data
             self.classes = classes
 
+        self.raw_idx = torch.arange(len(self.raw_data))
+
         self.class_distribution = self.get_class_distribution(self.labels)
-        #Counter({10: 39019, 3: 3511, 2: 1802, 9: 1365, 8: 1019, 7: 858, 5: 483, 14: 464, 16: 446, 1: 281, 12: 253, 0: 192, 15: 150, 13: 106, 11: 77, 4: 23, 6: 13})
         self.img_data = self.augment(data["img_data"], self.transform_fn)
 
         if reindex:
@@ -131,26 +128,18 @@ class MaskLoader(Dataset):
             all_sampled_idx.append(np.random.choice(indices, size=needed, replace=True))
 
         if all_sampled_idx:
-            # Gather every sampled image/label in one shot via fancy indexing instead of
-            # a per-image Python loop of individual indexing + list.append() + torch.stack --
-            # the vectorized gather below does the same work as a single C-level op.
             sampled_idx = torch.from_numpy(np.concatenate(all_sampled_idx))
 
-            new_imgs_batch = self.raw_data[sampled_idx]   # Shape: [B, C, H, W]
-            new_labels_batch = self.labels[sampled_idx]   # Shape: [B, K]
+            self.raw_idx = torch.cat([self.raw_idx, self.raw_idx[sampled_idx]])
+            self.labels  = torch.cat([self.labels, self.labels[sampled_idx]])
 
-            new_augmented_imgs = self.augment(new_imgs_batch, self.transform_fn)
-
-            self.raw_data = torch.cat([self.raw_data, new_imgs_batch])
-            self.img_data = torch.cat([self.img_data, new_augmented_imgs])
-            self.labels   = torch.cat([self.labels, new_labels_batch])
+            self.resample()
 
     def resample(self):
-        #resample data from augmentation distribution
-        self.img_data = self.augment(self.raw_data, self.transform_fn)
+        self.img_data = self.augment(self.raw_data, self.transform_fn, indices=self.raw_idx)
 
     @staticmethod
-    def augment(images: torch.Tensor, transform_fn, batch_size=1000):
+    def augment(images: torch.Tensor, transform_fn, batch_size=1000, indices=None):
         """
         Apply transform_fn to `images` in batches to reduce memory usage.
 
@@ -158,16 +147,21 @@ class MaskLoader(Dataset):
             images (torch.Tensor): Tensor of shape [N, ...]
             transform_fn (Callable): Augmentation function applied to each batch
             batch_size (int): Number of images per batch
+            indices (torch.Tensor, optional): Row indices into `images` (may repeat
+                and/or be longer than `images`) defining the output dataset -- each
+                batch is gathered from `images` on the fly instead of eagerly
+                building `images[indices]` as one full-size tensor beforehand.
 
         Returns:
-            torch.Tensor: Transformed tensor of the same shape as `images`
+            torch.Tensor: Transformed tensor of shape [len(indices) or N, ...]
         """
-        N = len(images)
-        output = torch.empty_like(images, dtype=torch.float32)
+        N = len(indices) if indices is not None else len(images)
+        output = torch.empty((N, *images.shape[1:]), dtype=torch.float32)
 
         with torch.no_grad():
             for i in tqdm(range(0, N, batch_size), desc="Augmenting Masks"):
-                batch = images[i:i+batch_size].clone()
+                idx = indices[i:i+batch_size] if indices is not None else slice(i, i+batch_size)
+                batch = images[idx].clone()
                 transformed = transform_fn(batch)
 
                 if transformed.shape != batch.shape:
@@ -221,13 +215,7 @@ class MaskLoader(Dataset):
             np_image = self.segmentation_model.resize_image(
                 np.array(Image.open(x)), self.segmentation_model.img_size
             ).transpose((2, 0, 1)) #Resize if necessary
-            torch_image = torch.tensor(np_image) #Needed to convert binary masks into a dataset of torch tensors
-
-            #Here is the image if you want to see it (before transformations)
-            # import matplotlib.pyplot as plt
-            # plt.figure()
-            # plt.imshow(torch_image.numpy().transpose((1, 2, 0)))
-            # plt.show()
+            torch_image = torch.tensor(np_image)
 
             for j, segmentation in enumerate(gt_masks_set[i]):
                 torch_mask = torch.tensor(segmentation)
@@ -263,6 +251,7 @@ class MaskLoader(Dataset):
         #Save the data as tensors objects for pytorch models
         self.img_data = torch.stack(img_data)
         self.raw_data = torch.stack(img_data)
+        self.raw_idx = torch.arange(len(self.raw_data))
         self.labels = torch.nn.functional.one_hot(torch.tensor([self.classes[label] for label in labels]), num_classes=len(self.classes))
         self.class_distribution = self.get_class_distribution(self.labels)
 

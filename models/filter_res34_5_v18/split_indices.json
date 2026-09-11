@@ -1,0 +1,13 @@
+{
+  "seed": 42,
+  "split": 0.3,
+  "ensemble_split": 0.1,
+  "legacy_split": true,
+  "mask_data_path": "data/segmentation/maskloader_128_tolerance=0.2_v18.pt",
+  "sizes": {
+    "submodel_train_pool_idx": 41101,
+    "ensemble_pool_idx": 17615,
+    "ensemble_train_idx": 15853,
+    "ensemble_validation_idx": 1762
+  }
+}

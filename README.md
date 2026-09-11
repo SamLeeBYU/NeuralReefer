@@ -41,11 +41,10 @@ Neural Reefer requires **Python 3.9+**. All commands below (and all commands in 
    cd sam2/checkpoints && ./download_ckpts.sh && cd ../..
    ```
 
-4. **Point `scripts/config.py` at your local SAM2 checkout** — edit these two lines to the
+4. **Point `scripts/config.py` at your local SAM2 checkout** — edit this line to the
    full path where you cloned it in step 3:
    ```python
    SAM2_PATH = "/path/to/sam2"  # Replace with the full path
-   SAM2_CHECKPOINT_PATH = f"{SAM2_PATH}/checkpoints/sam2.1_hiera_large.pt"
    ```
 
 5. **Run inference** — pretrained coral filter models, class labels, and tuned SAM2
@@ -83,13 +82,13 @@ Neural Reefer requires **Python 3.9+**. All commands below (and all commands in 
 
 **NeuralReefer** is a modular deep learning pipeline for coral reef segmentation and classification, supporting inference from raw RGB imagery to ecologically structured coral cover statistics. The pipeline proceeds in three primary stages:
 
-1. **Segmentation with SAM2**:  
+1. **Segmentation with SAM2**:
    A dual-stream SAM2 segmentation module identifies candidate coral objects across varying size scales. One stream targets large coral colonies with high precision, while the other prioritizes recall for small, fragmented structures. Hyperparameters for each stream are tuned jointly with preprocessing augmentations using a Monte Carlo optimization strategy. Outputs are merged by confidence-weighted ranking and non-maximum suppression.
 
-2. **Coral Classification**:  
+2. **Coral Classification**:
    Each candidate mask is cropped and passed to an ensemble of CNN classifiers (ResNet-34 backbone with MLP head), trained to distinguish between 13 mutually exclusive categories (6 coral genera × 2 bleaching statuses + 1 noncoral). Negative training examples are synthetically generated from false positive masks. Per-epoch augmentations are sampled from a surrogate distribution that emulates natural mask variability. An ensemble optimizer aggregates predictions via softmax-weighted logits using class-balanced focal loss.
 
-3. **Cover Estimation**:  
+3. **Cover Estimation**:
    Accepted masks are aggregated by pixel area to compute coral cover statistics:
    - Total coral cover
    - Bleached vs. live proportions
@@ -163,6 +162,60 @@ python scripts/main.py --mode train
 ```bash
 python scripts/main.py --mode visualize --version <VERSION>
 ```
+
+---
+
+## 📄 Reproducing the Paper's Results
+
+These are the exact command-line steps to reproduce the paper's reported LCC IoU/Dice
+numbers on another machine, starting from nothing but this repository.
+
+1. **Clone this repository** and `cd` into it:
+   ```bash
+   git clone https://github.com/your-repo/NeuralReefer.git
+   cd NeuralReefer
+   ```
+
+2. **Set up the Python environment** (see Installation above for details):
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate      # on Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+3. **Install SAM2** and download its checkpoint:
+   ```bash
+   git clone https://github.com/facebookresearch/sam2.git
+   cd sam2 && pip install -e . && cd ..
+   cd sam2/checkpoints && ./download_ckpts.sh && cd ../..
+   ```
+
+4. **Edit `SAM2_PATH` in `scripts/config.py`** to the full path where you cloned SAM2 in
+   step 3.
+
+5. **Download and extract the training data** from Zenodo
+   (<https://doi.org/10.5281/zenodo.19373197>) into the repository root, so that
+   `yellowfin_segment.v18i.coco-segmentation/train/` (containing the 552 annotated images and
+   `_annotations.coco.json`) sits directly under `NeuralReefer/` — this must match `TRAIN_DIR`
+   in `config.py`.
+
+6. **Run the full reproduction script.** This uses the pretrained submodels + ensemble
+   already committed under `models/filter_res34_5_v18/` — no training required — running SAM2
+   and the CNN ensemble over all 552 images and scoring the result against ground truth:
+   ```bash
+   python scripts/replicate.py
+   ```
+   Depending on the CPU/GPU used, this will take anywhere from several hours to several days to complete.
+
+7. **Print the held-out LCC IoU/Dice result** to compare against the paper/another machine:
+   ```bash
+   python -c "
+   import pandas as pd
+   df = pd.read_csv('yellowfin_segment.v18i.coco-segmentation/train/inference/annotations_coco_test_metrics.csv')
+   lcc = df[df['taxonomy'] == 'lcc']
+   print(f\"Test-set LCC IoU: {lcc['iou'].mean():.4f}  |  Dice: {lcc['dice_f1'].mean():.4f}  (n={len(lcc)} images)\")
+   "
+   ```
 
 ---
 

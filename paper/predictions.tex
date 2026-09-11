@@ -1,0 +1,59 @@
+% tex/fig-qual-examples.tex
+% Requires in your main preamble: \usepackage{graphicx,booktabs,array}
+\begingroup
+
+% ----- local knobs (scoped to this file only) -----
+\newcommand{\qualOGext}{.jpg}
+\newcommand{\qualGText}{.png}
+\newcommand{\qualPREext}{.png}
+
+\newlength{\qualColW}   \setlength{\qualColW}{0.22\textwidth}
+\newlength{\qualRowH}   \setlength{\qualRowH}{0.165\textheight}
+
+% local gutters (scoped)
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{0.5}
+\newcommand{\qualRowSpace}{0.1em}
+
+% fixed-height, centered cell
+\newcommand{\qualCellImg}[2]{%
+  \begin{minipage}[c][\qualRowH][c]{\qualColW}\centering
+    \includegraphics[height=\dimexpr #2\qualRowH\relax, keepaspectratio]{#1}%
+  \end{minipage}%
+}
+
+% column helpers
+\newcommand{\qualOGcell}[1]{%
+  \qualCellImg{fig9#1_og\qualOGext}{0.92}}
+\newcommand{\qualGTcell}[1]{%
+  \qualCellImg{fig9#1_gt\qualGText}{1.00}}
+\newcommand{\qualPREcell}[1]{%
+  \qualCellImg{fig9#1_pred\qualPREext}{1.00}}
+
+% one table row
+\newcommand{\qualExampleRow}[1]{%
+  \qualOGcell{#1} & \qualGTcell{#1} & \qualPREcell{#1} \\
+  \addlinespace[\qualRowSpace]
+}
+
+\begin{figure}[htbp]
+\centering
+% Constrain total figure height; tweak 0.49 as desired
+\resizebox{!}{0.45\textheight}{%
+  \begin{tabular}{ccc}
+    \toprule
+    \textbf{\small Yellowfin Image} & \textbf{\small Ground Truth} & \textbf{\small Prediction} \\
+    \midrule
+    % \qualExampleRow{GPAB4602}
+    \qualExampleRow{a}
+    \qualExampleRow{b}
+    \qualExampleRow{c}
+    \qualExampleRow{d}
+    \bottomrule
+  \end{tabular}%
+}
+\caption{Qualitative examples from the held-out test set, comparing raw Yellowfin images, expert annotations, and machine vision pipeline predictions. Colors are arbitrary, but identical colors denote identical classes; lighter shades within a genus indicate bleached status. The SAM2-based segmentation captures colony boundaries at a precision difficult even for human annotators.}
+\label{fig:qual-results}
+\end{figure}
+
+\endgroup

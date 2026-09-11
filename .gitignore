@@ -1,8 +1,6 @@
-# Personal configuration file
-scripts/config.py
-
 # Miscellaneous
 scripts/ensemble_aggregation_sim.R
+scripts/verify_split_integrity.py
 
 ### Large Files ###
 
@@ -14,6 +12,7 @@ data/versions/
 !data/README.md
 data/examples/annotations_coco.json
 data/examples/inference
+yellowfin_segment.v18i.coco-segmentation
 
 scripts/coralnet.py
 

@@ -1,17 +1,31 @@
+                          In - Sample                                 Out-of-Sample                
+Model     | Accuracy | Precision | Recall | F2     || Accuracy | Precision | Recall | F2     |
+===================================================================================================
+  1       | 0.8712   | 0.9455    | 0.8860 | 0.8973 || 0.8547   | 0.9416    | 0.8731 | 0.8860 |
+  2       | 0.8688   | 0.9208    | 0.9101 | 0.9122 || 0.8558   | 0.9041    | 0.8934 | 0.8955 |
+  3       | 0.8775   | 0.9319    | 0.9099 | 0.9142 || 0.8621   | 0.9107    | 0.8968 | 0.8995 |
+  4       | 0.8742   | 0.9172    | 0.9143 | 0.9149 || 0.8445   | 0.8861    | 0.9086 | 0.9040 |
+  5       | 0.8805   | 0.9256    | 0.9100 | 0.9131 || 0.8678   | 0.9218    | 0.8782 | 0.8866 |
+---------------------------------------------------------------------------------------------------
+EM        | 0.8947   | 0.9250    | 0.9306 | 0.9295 || 0.9075   | 0.9359    | 0.9391 | 0.9385 |
+Linear    | 0.8998   | 0.9394    | 0.9148 | 0.9196 || 0.9041   | 0.9444    | 0.9205 | 0.9252 |
+Adam      | 0.8905   | 0.9242    | 0.9222 | 0.9226 || 0.9030   | 0.9418    | 0.9306 | 0.9328 |
+Reweight  | 0.8930   | 0.9145    | 0.9396 | 0.9345 || 0.9030   | 0.9301    | 0.9459 | 0.9427 |
+Multinom  | 0.8970   | 0.9275    | 0.9363 | 0.9345 || 0.9092   | 0.9412    | 0.9475 | 0.9463 |
+NeuralNet | 0.9015   | 0.9071    | 0.9552 | 0.9452 || 0.9081   | 0.9223    | 0.9645 | 0.9557 |
 
-                 In - Sample                     Out-of-Sample
-Model     | Accuracy | Precision | Recall || Accuracy | Precision | Recall |
-=============================================================================
-   1      | 0.8722   | 0.9485    | 0.8855 || 0.8604   | 0.9556    | 0.8748
-   2      | 0.8619   | 0.9224    | 0.9023 || 0.8587   | 0.9329    | 0.8934
-   3      | 0.8807   | 0.9363    | 0.9079 || 0.8621   | 0.9333    | 0.9002
-   4      | 0.8797   | 0.9264    | 0.9196 || 0.8632   | 0.9148    | 0.9086
-   5      | 0.8865   | 0.9311    | 0.9168 || 0.8780   | 0.9398    | 0.8985
------------------------------------------------------------------------------
- Ensemble | 0.91333  | 0.9330    | 0.9554 ||  0.9086  | 0.9433    | 0.9577
-
- Notes: Each model's in-sample reporting is based necessarily on a different augmentation and
- bootstrapped version of the same training data (41101 masks). The ensemble's in-sample data
- is purposely mutually exclusive from the in-sample sets the submodels were trained on
- (15,853 masks). However, all out-of-sample statistics were collected on the exact same set of
- augmented validation masks (1,762 masks).
+ Notes: Each submodel's in-sample figures are computed on the full
+ (non-bootstrapped) training partition it was drawn from (41101 masks) --
+ the exact bootstrapped resample each model actually trained on isn't
+ persisted, so this is the closest reproducible proxy, not the literal
+ training set. Each of the rows below the divider is a different
+ ENSEMBLE_METHOD (see config.py/config.ALL_ENSEMBLE_METHODS), all fit on
+ the SAME 15853 masks -- disjoint from every submodel's training pool
+ by construction (held out before any submodel training began). All
+ out-of-sample statistics (every row, and the confusion matrix) are
+ computed on the same shared 1762-mask partition -- the one slice
+ untouched by both submodel training and any ensemble fit (same nested
+ stratified splits, seed=42). The confusion matrix reflects only the
+ "Reweight" method (CONFUSION_MATRIX_METHOD in generate_filter_reports.py),
+ not all five -- chosen as the best-performing method above, independent
+ of config.py's ENSEMBLE_METHOD (the production default).

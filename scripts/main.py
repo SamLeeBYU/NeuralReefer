@@ -45,14 +45,15 @@ Main use case: Use NeuralReefer to obtain summary data on new coral images
 import argparse
 import os
 from pathlib import Path
+import numpy as np
 import pandas as pd
 import torch
 from tqdm import tqdm
 
-from config import SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, FILTER_MODELS_DIR, EXT, VERBOSE, M, SAVE_MASKS, SAVE_COCO, METADATA
+from config import SAM2_CONFIG_PATH, SAM2_CHECKPOINT_PATH, FILTER_MODELS_DIR, EXT, VERBOSE, M, SAVE_MASKS, SAVE_COCO, METADATA, ABLATION_SUBMODEL
 
 from utils import suppress_prints, restore_prints
-from train import train, load_data
+from train import train, load_data, union_mask, pixel_confusion_metrics
 from visualize import plot_segmentation_summary, plot_coral_cover
 
 from filter import CoralFilterEnsembler
@@ -60,7 +61,82 @@ from segmenter import CoralSegmenter
 
 from export_coco import COCOExporter
 
-def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = None) -> pd.DataFrame:
+V1_PREDICTIONS_CSV = "data/performance/v1.0_iou_specificity.csv"
+
+def _load_v1_predictions(csv_path=V1_PREDICTIONS_CSV):
+    """Loads reference per-image LCC predictions/IoU for the live spot-check
+    comparison in _live_stats_line, keyed by filename (image_id is not
+    unique in this dataset -- see the note in inference() below). dice_lcc
+    is derived from the csv's tp/fp/fn_lcc columns. Returns {} if the file
+    is missing, silently disabling the comparison."""
+    if not os.path.exists(csv_path):
+        return {}
+    df = pd.read_csv(csv_path)
+    df["filename"] = df["image"].apply(lambda p: os.path.basename(str(p).replace("\\", "/")))
+    out = {}
+    for row in df.itertuples():
+        denom = 2 * row.tp_lcc + row.fp_lcc + row.fn_lcc
+        out[row.filename] = {
+            "coral_cover_pred": row.coral_cover_pred,
+            "pct_bleached_pred": row.pct_bleached_pred,
+            "iou_lcc": row.iou_lcc,
+            "dice_lcc": (2 * row.tp_lcc / denom) if denom > 0 else float("nan"),
+        }
+    return out
+
+def _with_suffix(path: str, suffix: str) -> str:
+    """Inserts `suffix` before a path's extension, e.g. ("a/b.csv", "_x") -> "a/b_x.csv"."""
+    root, ext = os.path.splitext(path)
+    return f"{root}{suffix}{ext}"
+
+def _build_stats_record(segmenter, masks, pred_labels, genus_names, img_path, image_id):
+    """Every masks/pred_labels-derived statistic inference() records for ONE
+    image (coral cover, bleaching %, per-genus cover). Reused for both the
+    main ensemble result and the ABLATION_SUBMODEL result. Mirrors
+    train.py's compute_pred_stats for the eval() path."""
+    cover = segmenter.coral_cover(masks, cs=segmenter.crop_space)
+    pct_bleached = segmenter.coral_cover(
+        [masks[j] for j in range(len(pred_labels)) if pred_labels[j].endswith(":bleached")],
+        cs=segmenter.crop_space
+    )
+
+    record = {
+        "image": img_path,
+        "image_id": image_id,
+        "coral_cover_pred": cover,
+        "pct_bleached_pred": pct_bleached,
+    }
+    for genus in genus_names:
+        record[f"cover_pred__{genus}"] = segmenter.coral_cover(
+            [masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(f"{genus}:")],
+            cs=segmenter.crop_space
+        )
+        record[f"cover_healthy_pred__{genus}"] = segmenter.coral_cover(
+            [masks[j] for j in range(len(pred_labels)) if pred_labels[j] == f"{genus}:healthy"],
+            cs=segmenter.crop_space
+        )
+    return record
+
+def _live_stats_line(image_id, cover_pred, pctb_pred, gt_stats, v1_stats=None):
+    """One live progress line for the image just analyzed: predicted LCC/
+    %bleached always; true LCC/%bleached and LCC IoU/Dice when ground truth
+    is available (gt_stats is None otherwise); a reference run's LCC/
+    %bleached/IoU/Dice for the same image when available (v1_stats is None
+    otherwise)."""
+    line = f"{image_id:>12} | pred LCC {cover_pred:6.3f} | pred %bleach {pctb_pred:6.3f}"
+    if gt_stats is not None:
+        line += (f" | true LCC {gt_stats['coral_cover_true']:6.3f}"
+                 f" | true %bleach {gt_stats['pct_bleached_true']:6.3f}"
+                 f" | LCC IoU {gt_stats['iou_lcc']:6.3f} | LCC Dice {gt_stats['dice_lcc']:6.3f}")
+    if v1_stats is not None:
+        line += (f" || v1 LCC {v1_stats['coral_cover_pred']:6.3f}"
+                 f" | v1 %bleach {v1_stats['pct_bleached_pred']:6.3f}"
+                 f" | v1 IoU {v1_stats['iou_lcc']:6.3f} | v1 Dice {v1_stats['dice_lcc']:6.3f}")
+    return line
+
+
+def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = None,
+              annotation_path: str | None = None) -> pd.DataFrame:
     """
     Evaluates coral cover for a directory of images using a trained CoralSegmenter.
 
@@ -69,9 +145,30 @@ def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = No
         output_file (str): CSV file where aggregated results are saved.
         COCO_output_dir (str): Directory to save COCO format annotations.
             If None, annotations will be saved in the same directory as images.
+        annotation_path (str): Optional ground-truth COCO json (Roboflow
+            convention, see CoralSegmenter.parse_annotations). When given,
+            each image's live progress line also reports true LCC/%bleached
+            and LCC IoU/Dice for any image that has a matching annotation
+            (silently omitted for images that don't). Has no effect on what
+            gets saved to output_file/COCO_output_dir -- ground truth is only
+            used for this live printout, not persisted, since per-taxonomy
+            IoU/Dice is already fully recoverable after the fact from the
+            saved COCO export (see utils.compute_coco_taxonomy_metrics /
+            scripts/replicate.py's evaluate_coco_predictions). None (default)
+            for genuinely new, unannotated images.
 
     Returns:
         pd.DataFrame: DataFrame with image metadata and coral cover breakdown.
+
+    Ablation study (see config.py's ABLATION_SUBMODEL): if set, this ALSO
+    records the same statistics (and, if SAVE_COCO, the same COCO export)
+    for that one submodel's predictions -- computed from
+    segmenter.last_ablation_result, i.e. the SAME predict() call, no extra
+    inference pass -- to files suffixed "_ablation_submodel{N}". NOTE: resume
+    support (skipping images already in output_file) is keyed off the main
+    output_file only; if ABLATION_SUBMODEL is toggled on between runs that
+    resume a partially-completed output_file, already-done images won't
+    retroactively get an ablation record.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -82,10 +179,21 @@ def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = No
         config_path=SAM2_CONFIG_PATH,
         checkpoint_path=SAM2_CHECKPOINT_PATH,
         coral_filter=coral_filter,
+        annotation_path=annotation_path,
         device=device
     )
 
     exporter = COCOExporter(coral_filter.classes)
+
+    run_ablation = ABLATION_SUBMODEL is not None
+    exporter_abl = COCOExporter(coral_filter.classes) if run_ablation else None
+    output_file_abl = _with_suffix(output_file, f"_ablation_submodel{ABLATION_SUBMODEL}") if run_ablation else None
+
+    output_dir = COCO_output_dir if COCO_output_dir is not None else image_dir
+    output_json = f"{output_dir}/annotations_coco.json"
+    output_json_abl = f"{output_dir}/annotations_coco_ablation_submodel{ABLATION_SUBMODEL}.json" if run_ablation else None
+
+    v1_predictions = _load_v1_predictions()
 
     image_paths = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if f.endswith(EXT)]
     genus_names = sorted(set(
@@ -99,20 +207,40 @@ def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = No
     images_done = set()
     if os.path.exists(output_file):
         existing = pd.read_csv(output_file)
-        images_done = set(existing["image_id"].astype(str).tolist())
+        # Keyed by filename, not image_id: image_id is not unique in this
+        # dataset (two distinct images can share the same id).
+        images_done = set(existing["image"].apply(lambda p: os.path.basename(str(p).replace("\\", "/"))))
         results = existing.to_dict("records")
     else:
         results = []
 
+    results_abl = []
+    if run_ablation and os.path.exists(output_file_abl):
+        results_abl = pd.read_csv(output_file_abl).to_dict("records")
+
+    # Reload any COCO entries a prior (resumed) run already exported, so
+    # exporter.save() below doesn't overwrite them with only this run's images.
+    if SAVE_COCO and os.path.exists(output_json):
+        exporter.load(output_json)
+    if SAVE_COCO and run_ablation and os.path.exists(output_json_abl):
+        exporter_abl.load(output_json_abl)
+
+    # Whether large_feature_generator/small_feature_generator have been built
+    # yet in this process (not the same as "first image in image_paths",
+    # since a resumed run skips past already-done images first).
+    models_initialized = False
+
+    pbar = tqdm(image_paths)
     try:
-        for i, img_path in enumerate(tqdm(image_paths)):
+        for img_path in pbar:
             image_id = Path(img_path).stem.split('_')[0]
 
-            if image_id in images_done:
+            if os.path.basename(img_path) in images_done:
                 continue
 
             if not VERBOSE: suppress_prints()
-            masks, labels = segmenter.predict(img_path=img_path, init_models=(i==0), verbose=VERBOSE)
+            masks, labels = segmenter.predict(img_path=img_path, init_models=(not models_initialized), verbose=VERBOSE)
+            models_initialized = True
             if not VERBOSE: restore_prints()
 
             pred_labels = segmenter.coral_filter.get_class_names(labels, segmenter.coral_filter.classes)
@@ -120,57 +248,75 @@ def inference(image_dir: str, output_file: str, COCO_output_dir: str | None = No
             if SAVE_COCO:
                 img = segmenter.load_image(img_path=img_path)
                 H, W = img.shape[:2]
-                exporter.add_image(os.path.basename(img_path), H, W, i)
+                img_id = exporter.add_image(os.path.basename(img_path), H, W)
 
                 for j, mask in enumerate(masks):
                     if j >= len(pred_labels): continue
-                    exporter.add_annotation(i, mask, pred_labels[j])
+                    exporter.add_annotation(img_id, mask, pred_labels[j])
 
-            cover = segmenter.coral_cover(masks, cs=segmenter.crop_space)
-            pct_bleached = segmenter.coral_cover(
-                [masks[j] for j in range(len(pred_labels)) if pred_labels[j].endswith(":bleached")],
-                cs=segmenter.crop_space
-            )  
+            stats_record = _build_stats_record(segmenter, masks, pred_labels, genus_names, img_path, image_id)
+            results.append(stats_record)
 
-            genus_cover = {}
-            genus_cover_healthy = {}
-            for genus in genus_names:
-                genus_cover[genus] = segmenter.coral_cover(
-                    [masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(f"{genus}:")],
-                    cs=segmenter.crop_space
-                )
-                genus_cover_healthy[genus] = segmenter.coral_cover(
-                    [masks[j] for j in range(len(pred_labels)) if pred_labels[j] == f"{genus}:healthy"],
-                    cs=segmenter.crop_space
-                )
+            # Ground truth (when annotation_path was given and this image has
+            # a matching entry), used only for the live progress line below --
+            # never persisted, since per-taxonomy IoU/Dice is recoverable
+            # from the saved COCO export (see utils.compute_coco_taxonomy_metrics).
+            gt_stats = None
+            if segmenter.annotations is not None:
+                genus_labels, bleach_labels, gt_masks = segmenter.get_gt_masks(img_path)
+                if genus_labels is not None:
+                    ml_labels = np.char.add(genus_labels, np.where(bleach_labels == 1, ":bleached", ":healthy"))
+                    gt_masks = [m for j, m in enumerate(gt_masks) if genus_labels[j] != "noncoral"]
+                    gt_labels = [ml_labels[j] for j in range(len(ml_labels)) if genus_labels[j] != "noncoral"]
 
-            record = {
-                "image": img_path,
-                "image_id": image_id,
-                "coral_cover_pred": cover,
-                "pct_bleached_pred": pct_bleached,
-            }
+                    coral_cover_true = segmenter.coral_cover(gt_masks, cs=segmenter.crop_space)
+                    pct_bleached_true = segmenter.coral_cover(
+                        [gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].endswith(":bleached")],
+                        cs=segmenter.crop_space
+                    )
+                    _, _, _, iou_lcc, dice_lcc, _, _ = pixel_confusion_metrics(union_mask(gt_masks), union_mask(masks))
+                    gt_stats = {
+                        "coral_cover_true": coral_cover_true,
+                        "pct_bleached_true": pct_bleached_true,
+                        "iou_lcc": iou_lcc,
+                        "dice_lcc": dice_lcc,
+                    }
 
-            for g in genus_names:
-                record[f"cover_pred__{g}"] = genus_cover[g]
-                record[f"cover_healthy_pred__{g}"] = genus_cover_healthy[g]
+            v1_stats = v1_predictions.get(os.path.basename(img_path))
+            pbar.write(_live_stats_line(image_id, stats_record["coral_cover_pred"],
+                                         stats_record["pct_bleached_pred"], gt_stats, v1_stats))
+
+            if run_ablation and segmenter.last_ablation_result is not None:
+                masks_abl, labels_abl = segmenter.last_ablation_result
+                pred_labels_abl = segmenter.coral_filter.get_class_names(labels_abl, segmenter.coral_filter.classes)
+
+                if SAVE_COCO:
+                    img_id_abl = exporter_abl.add_image(os.path.basename(img_path), H, W)
+                    for j, mask in enumerate(masks_abl):
+                        if j >= len(pred_labels_abl): continue
+                        exporter_abl.add_annotation(img_id_abl, mask, pred_labels_abl[j])
+
+                results_abl.append(_build_stats_record(segmenter, masks_abl, pred_labels_abl, genus_names, img_path, image_id))
 
             if SAVE_MASKS:
                 segmenter.show_masks(masks, segmenter.color_map, pred_labels, show=False,
                                         save_path=save_dir / f"{image_id}.png")
 
-            results.append(record)
-
     finally:
         pd.DataFrame(results).to_csv(output_file, index=False)
-        if SAVE_COCO:
-            output_dir = COCO_output_dir if COCO_output_dir is not None else image_dir
-            output_json = f"{output_dir}/annotations_coco.json"
+        if run_ablation:
+            pd.DataFrame(results_abl).to_csv(output_file_abl, index=False)
 
+        if SAVE_COCO:
             exporter.save(output_json)
             if VERBOSE:
                 print(f"Predicted masks saved to {output_json}")
-        
+
+            if run_ablation:
+                exporter_abl.save(output_json_abl)
+                if VERBOSE:
+                    print(f"Ablation (submodel {ABLATION_SUBMODEL}) predicted masks saved to {output_json_abl}")
+
     return pd.DataFrame(results)
 
 if __name__ == "__main__":
@@ -187,7 +333,6 @@ if __name__ == "__main__":
         train()
 
     elif args.mode == "visualize":
-        #assert args.prediction_file
         plot_coral_cover(version=args.prediction_file)
 
     elif args.mode == "inference":

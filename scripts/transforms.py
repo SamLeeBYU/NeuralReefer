@@ -6,11 +6,28 @@ and utilities for enhancing underwater image quality.
 
 import cv2
 import numpy as np
+from contextlib import contextmanager
 
 import torch
 import torchvision.transforms.v2 as tv2
 
 from config import MASK_SIZE
+
+@contextmanager
+def seeded_rng(seed):
+    """
+    Temporarily pins torch's global RNG to `seed`, restoring whatever state
+    it had beforehand on exit -- makes a call site's use of
+    MASK_TRANSFORM_AUGMENT (or anything else drawing from torch's global
+    RNG) reproducible without affecting unrelated randomness elsewhere in a
+    longer-running process.
+    """
+    state = torch.get_rng_state()
+    torch.manual_seed(seed)
+    try:
+        yield
+    finally:
+        torch.set_rng_state(state)
 
 MASK_TRANSFORM = tv2.Compose([
     tv2.ToDtype(torch.float32, scale=True),
@@ -70,7 +87,6 @@ MASK_TRANSFORM_AUGMENT_AGGRESSIVE = tv2.Compose([
                          std=[0.229, 0.224, 0.225]),
 ])
 
-#If you do not wish to use the ResNet normalization you may undo the normalization with this method:
 def inv_norm(tensor):
     """
     Inverts the normalization applied by Normalize with
@@ -85,20 +101,3 @@ def inv_norm(tensor):
     mean = torch.tensor([0.485, 0.456, 0.406], device=tensor.device).view(-1, 1, 1)
     std = torch.tensor([0.229, 0.224, 0.225], device=tensor.device).view(-1, 1, 1)
     return tensor * std + mean
-
-# class CLAHETransform:
-#     """
-#     Applies CLAHE to the luminance channel of an RGB image
-#     to enhance local contrast in underwater scenes.
-#     """
-#     def __init__(self, clipLimit=2.0, tileGridSize=(8, 8)):
-#         self.clipLimit = clipLimit
-#         self.tileGridSize = tileGridSize
-
-#     def __call__(self, img):
-#         img = np.transpose(img.numpy(), (1, 2, 0))
-#         img_yuv = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
-#         clahe = cv2.createCLAHE(clipLimit=self.clipLimit, tileGridSize=self.tileGridSize)
-#         img_yuv[:, :, 0] = clahe.apply(img_yuv[:, :, 0])
-#         img_clahe = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
-#         return img_clahe

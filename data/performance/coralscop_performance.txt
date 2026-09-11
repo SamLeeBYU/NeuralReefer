@@ -1,0 +1,4 @@
+                 n       iou   dice_f1  precision    recall
+split                                                      
+Out-of-Sample  111  0.486719  0.614475   0.618025  0.738435
+In-Sample      441  0.502819  0.635034   0.617965  0.765721

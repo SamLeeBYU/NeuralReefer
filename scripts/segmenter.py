@@ -58,6 +58,7 @@ class SAM2Segmenter:
 
         self.remap_dic = remap_dic or remap_json
 
+        self.annotations = None
         if annotation_path is not None:
             self.parse_annotations(annotation_path)
 
@@ -687,6 +688,7 @@ class CoralSegmenter(SAM2Segmenter):
         self.coral_filter = coral_filter
         self.crop_space = cs or CROP_SPACE
         self.color_map = self._create_color_map(self.coral_filter.classes)
+        self.last_ablation_result = None  # set by predict() when config.ABLATION_SUBMODEL is set
 
     # Automatic SAM2 Calibration Algorithm (ASCA) ################################################################
     def predict(self, img_path=None, img: Image=None, large_feature_params=None, small_feature_params=None,
@@ -715,6 +717,10 @@ class CoralSegmenter(SAM2Segmenter):
                                                 overlap=overlap,
                                                 min_area=min_area, init_models=init_models, verbose=verbose, keep_all=True)
 
+            # Stashed so merge() can be re-run against a different proba array
+            # from this same set of raw SAM2 proposals without a second predict() pass.
+            self.last_proposal_masks = all_coral_masks
+
             #SAM2Segmenter's predict method will load in the image -> self.image and resize if necessary
             image = torch.tensor(self.image.transpose((2, 0, 1)))
 
@@ -723,21 +729,39 @@ class CoralSegmenter(SAM2Segmenter):
 
             #NOTE: Computation time for this operation may vary depending on the size of the coral filter ensembler used (e.g. how many submodules there are)
             coral_classes_proba = self.coral_filter.predict(coral_masks_X, image, mask_size=mask_size)
-            coral_classes_p = np.abs(np.max(coral_classes_proba, axis=1)-1e-3)
-            weights = coral_classes_p #1/(1-coral_classes_p)
-            coral_classes_preds = np.argmax(coral_classes_proba, axis=1)
 
-            is_coral = coral_classes_preds != self.coral_filter.noncoral_class
-            coral_masks = [mask for i, mask in enumerate(all_coral_masks) if is_coral[i]]
+            # Classifies + consolidates one set of class probabilities into
+            # final (masks, labels); factored out so the ablation branch below
+            # can reuse the same SAM2 proposals/CNN logits against a different
+            # probability source without re-running inference.
+            def classify_and_merge(proba):
+                classes_p = np.abs(np.max(proba, axis=1)-1e-3)
+                weights = classes_p #1/(1-classes_p)
+                classes_preds = np.argmax(proba, axis=1)
 
-            #Merge masks (or 'consolidate' as Calvin says)
-            coral_masks_merged, kept = self.merge(coral_masks, weights=weights[is_coral], min_area=min_area, overlap=overlap, verbose=verbose)
-            if len(kept) > 0:
-                #Corresponding class labels
-                #np.array(list(self.coral_filter.classes.keys()))[labels]
-                return coral_masks_merged, coral_classes_preds[is_coral][kept]
-            else:
-                return np.array([]), np.array([])
+                is_coral = classes_preds != self.coral_filter.noncoral_class
+                masks_subset = [mask for i, mask in enumerate(all_coral_masks) if is_coral[i]]
+
+                #Merge masks (or 'consolidate' as Calvin says)
+                merged, kept = self.merge(masks_subset, weights=weights[is_coral], min_area=min_area, overlap=overlap, verbose=verbose)
+                if len(kept) > 0:
+                    #Corresponding class labels
+                    #np.array(list(self.coral_filter.classes.keys()))[labels]
+                    return merged, classes_preds[is_coral][kept]
+                else:
+                    return np.array([]), np.array([])
+
+            result = classify_and_merge(coral_classes_proba)
+
+            # Ablation study (see config.py's ABLATION_SUBMODEL): if set,
+            # CoralFilterEnsembler.predict() also stashed that one submodel's
+            # own probabilities above -- redo classify+merge against those
+            # too, so callers can read both results from a single predict()
+            # call instead of running inference twice.
+            ablation_proba = getattr(self.coral_filter, "last_ablation_proba", None)
+            self.last_ablation_result = classify_and_merge(ablation_proba) if ablation_proba is not None else None
+
+            return result
 
     @staticmethod
     def _create_color_map(classes):

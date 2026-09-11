@@ -37,7 +37,10 @@ class COCOExporter:
             "height": height,
             "width": width
         })
-        self.image_id += 1
+        # max(...)+1 (not a plain +1) so an explicit image_id can't leave
+        # self.image_id trailing behind it and hand out a colliding id later.
+        self.image_id = max(self.image_id, img_id) + 1
+        return img_id
 
     def add_annotation(self, image_id, mask, label):
         segmentation = mask_to_poly(mask)
@@ -66,15 +69,24 @@ class COCOExporter:
                 "categories": self.categories
             }, f, indent=2)
 
-#def binary_mask_to_polygons(mask):
-    #contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE) # need to ensure EXT/SIMPLE isn't screwing things up
-    #segmentation = []
-    #for contour in contours:
-        #if len(contour) >= 3:
-            #poly = contour.flatten().astype(float).tolist()
-            #if len(poly) >= 6:
-                #segmentation.append(poly)
-    #return segmentation
+    def load(self, path):
+        """
+        Pre-populates this exporter from an already-written COCO json (its
+        own prior save(), typically) -- for resuming a partially-completed
+        inference run without losing the entries it already exported.
+        `categories` is left as __init__ built it (assumed identical, since
+        both come from the same class_names) rather than overwritten.
+        Advances image_id/ann_id past the max id already present, so newly
+        added entries can't collide with the reloaded ones.
+        """
+        with open(path, "r") as f:
+            existing = json.load(f)
+        self.images = existing["images"]
+        self.annotations = existing["annotations"]
+        if self.images:
+            self.image_id = max(img["id"] for img in self.images) + 1
+        if self.annotations:
+            self.ann_id = max(ann["id"] for ann in self.annotations) + 1
 
 def mask_to_poly(mask):
     array_polygons = supervision.mask_to_polygons(mask)

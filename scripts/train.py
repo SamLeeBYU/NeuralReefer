@@ -19,7 +19,7 @@ from config import (
 
     TRAIN_CORAL_FILTER, M, EPOCHS, BATCH_SIZE, LR, WEIGHT_DECAY, SPLIT, FILTER_MODELS_DIR, PATIENCE,
 
-    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE, SPATIAL_RADIUS, IMG_SIZE
+    EVAL, SAVE_IMG, FIG_SIZE, METADATA, VAL_SIZE, SPATIAL_RADIUS, IMG_SIZE, ABLATION_SUBMODEL
 )
 
 import os
@@ -51,11 +51,7 @@ def pixel_confusion_metrics(true_mask, pred_mask):
     """
     Pixel-level IoU/Dice(=F1)/precision/recall between two boolean masks,
     computed directly from the raw TP/FP/FN pixel counts (no area
-    normalization needed, since it cancels out of every ratio here) --
-    unlike the overall LCC metrics in data_viz.R, which had to be
-    reconstructed algebraically from aggregate accuracy/coverage numbers
-    because the per-mask arrays weren't available there. Here we have the
-    actual masks, so this is exact.
+    normalization needed, since it cancels out of every ratio here).
 
     precision/recall are NaN (not 0) when their denominator is zero, since
     "no positive predictions" or "no positive ground truth" makes the ratio
@@ -75,6 +71,75 @@ def pixel_confusion_metrics(true_mask, pred_mask):
     precision = tp / (tp + fp) if (tp + fp) > 0 else float("nan")
     recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
     return tp, fp, fn, iou, dice, precision, recall
+
+def compute_pred_stats(coral_segmenter, masks, pred_labels, gt_masks, gt_labels, genus_names, image, image_id, taxonomy_records):
+    """
+    Every masks/pred_labels-derived statistic eval() tracks for ONE image,
+    appending taxonomy rows into `taxonomy_records`. Ground truth
+    (gt_masks/gt_labels) is shared and unchanged regardless of which
+    prediction source produced masks/pred_labels -- this lets eval() call it
+    once for the ensemble result and again (reusing the same ground truth)
+    for config.ABLATION_SUBMODEL's result, off the same predict() call,
+    without duplicating this logic inline for each.
+    """
+    stats = {}
+    stats['accuracy'] = coral_segmenter.accuracy(masks, gt_masks)
+    stats['coral_cover_pred'] = coral_segmenter.coral_cover(masks, cs=coral_segmenter.crop_space)
+
+    # Bleached coverage
+    stats['pct_bleached_pred'] = coral_segmenter.coral_cover([
+        masks[j] for j in range(len(pred_labels)) if pred_labels[j].split(":")[-1] == "bleached"
+    ], cs=coral_segmenter.crop_space)
+
+    # Class-wise cover (bleached + healthy together)
+    cover_pred = np.zeros(len(genus_names))
+    for g, genus in enumerate(genus_names):
+        cover_pred[g] = coral_segmenter.coral_cover([
+            masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(genus + ":")
+        ], cs=coral_segmenter.crop_space)
+    stats['cover_pred'] = cover_pred
+
+    # Class-wise healthy cover only
+    cc_pred_healthy = []
+    for k in range(coral_segmenter.coral_filter.k):  # exclude noncoral
+        class_name = coral_segmenter.coral_filter.get_class_names([k], coral_segmenter.coral_filter.classes)[0]
+        if not class_name.endswith(":healthy"):
+            continue
+        cc_pred_healthy.append(coral_segmenter.coral_cover([
+            masks[j] for j in range(len(pred_labels)) if pred_labels[j] == class_name
+        ], cs=coral_segmenter.crop_space))
+    stats['cover_healthy_pred'] = np.array(cc_pred_healthy)
+
+    # Per-taxonomy IoU/Dice/precision/recall (see pixel_confusion_metrics / union_mask above).
+    def add_taxonomy_row(taxonomy, true_mask, pred_mask):
+        tp, fp, fn, iou, dice, precision, recall = pixel_confusion_metrics(true_mask, pred_mask)
+        taxonomy_records.append({
+            "image": image, "image_id": image_id, "taxonomy": taxonomy,
+            "tp_px": tp, "fp_px": fp, "fn_px": fn,
+            "iou": iou, "dice_f1": dice, "precision": precision, "recall": recall
+        })
+
+    add_taxonomy_row("all_coral", union_mask(gt_masks), union_mask(masks))
+
+    add_taxonomy_row(
+        "bleached",
+        union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].endswith(":bleached")]),
+        union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j].endswith(":bleached")]),
+    )
+
+    for genus in genus_names:
+        add_taxonomy_row(
+            genus,
+            union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].startswith(genus + ":")]),
+            union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(genus + ":")]),
+        )
+        add_taxonomy_row(
+            f"{genus}:healthy",
+            union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j] == f"{genus}:healthy"]),
+            union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j] == f"{genus}:healthy"]),
+        )
+
+    return stats
 
 def enforce_spatial_independence(train_images, test_images, metadata, radius=SPATIAL_RADIUS):
     """
@@ -306,7 +371,11 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
             device = device
         )
 
-        maskloader = MaskLoader(test_images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE)
+        # train_images (not test_images) become MASK_DATA_PATH -- the source for
+        # CNN submodel training and ensemble fitting; test_images stays fully
+        # unseen by the classifiers, held out for eval()'s final reported
+        # statistics below.
+        maskloader = MaskLoader(train_images, segmentation_model=segmenter, tolerance=TOLERANCE, mask_size=MASK_SIZE)
         maskloader.save_data(MASK_DATA_PATH)
 
     # Train the model to filter out non-coral masks
@@ -326,7 +395,7 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
 
     if eval:
 
-        #Once the ensemble model is trained, we can load back in all the parameter values for each model in the enemble as well as the ensemble weights and bias for the final ensemble method
+        # Reload the trained submodels and ensemble parameters
         coral_filter.load_models(FILTER_MODELS_DIR)
 
         coral_segmenter = CoralSegmenter(config_path, checkpoint_path, coral_filter, annotation_path = f"{TRAIN_DIR}/_annotations.coco.json", device=device)
@@ -359,6 +428,23 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
         # are computed downstream, in data_viz.R, from this per-image CSV.
         taxonomy_records = []
 
+        # Ablation study (see config.py's ABLATION_SUBMODEL): mirrors of every
+        # prediction-derived accumulator above, populated from
+        # coral_segmenter.last_ablation_result (the SAME predict() call,
+        # reusing the SAM2 proposals and CNN logits -- see
+        # CoralSegmenter.predict/CoralFilterEnsembler.predict) instead of the
+        # ensemble result. Ground truth ("_true") is identical between the
+        # two, so those accumulators are shared rather than duplicated. None
+        # of this runs (zero overhead) when ABLATION_SUBMODEL is unset.
+        run_ablation = ABLATION_SUBMODEL is not None
+        if run_ablation:
+            pixel_accuracies_abl = np.zeros(len(test_images))
+            coral_cover_pred_abl = np.zeros(len(test_images))
+            pct_bleached_pred_abl = np.zeros(len(test_images))
+            coral_cover_class_pred_abl = np.zeros((len(test_images), len(genus_names)))
+            coral_cover_class_healthy_pred_abl = np.zeros((len(test_images), len(genus_names)))
+            taxonomy_records_abl = []
+
         print(f"{'Idx':>4} | {'Acc':>6} | {'Avg Acc':>8} | {'True CC':>8} | {'Avg True CC':>12} | {'Pred CC':>8} | {'Avg Pred CC':>12}")
         print("-" * 78)
 
@@ -373,79 +459,43 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
 
             gt_masks = [segmentation for j, segmentation in enumerate(gt_masks) if genus_labels[j] != "noncoral"]
             gt_labels = [ml_labels[j] for j in range(len(ml_labels)) if genus_labels[j] != "noncoral"]
+            image_id = get_image_id(image)
 
-            pixel_accuracies[i] = coral_segmenter.accuracy(masks, gt_masks)
+            stats = compute_pred_stats(coral_segmenter, masks, pred_labels, gt_masks, gt_labels, genus_names, image, image_id, taxonomy_records)
+            pixel_accuracies[i] = stats['accuracy']
+            coral_cover_pred[i] = stats['coral_cover_pred']
+            pct_bleached_pred[i] = stats['pct_bleached_pred']
+            coral_cover_class_pred[i, :] = stats['cover_pred']
+            coral_cover_class_healthy_pred[i, :] = stats['cover_healthy_pred']
+
+            # Ground truth -- shared between the ensemble and ablation branches.
             coral_cover_true[i] = coral_segmenter.coral_cover(gt_masks, cs=coral_segmenter.crop_space)
-            coral_cover_pred[i] = coral_segmenter.coral_cover(masks, cs=coral_segmenter.crop_space)
-
-            # Bleached coverage
             pct_bleached_true[i] = coral_segmenter.coral_cover([
                 gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].split(":")[-1] == "bleached"
             ], cs=coral_segmenter.crop_space)
-
-            pct_bleached_pred[i] = coral_segmenter.coral_cover([
-                masks[j] for j in range(len(pred_labels)) if pred_labels[j].split(":")[-1] == "bleached"
-            ], cs=coral_segmenter.crop_space)
-
-            # Class-wise cover (bleached + healthy together)
             for g, genus in enumerate(genus_names):
                 coral_cover_class_true[i, g] = coral_segmenter.coral_cover([
                     gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].startswith(genus + ":")
                 ], cs=coral_segmenter.crop_space)
-
-                coral_cover_class_pred[i, g] = coral_segmenter.coral_cover([
-                    masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(genus + ":")
-                ], cs=coral_segmenter.crop_space)
-
-            # Class-wise healthy cover only
             cc_true_healthy = []
-            cc_pred_healthy = []
             for k in range(coral_segmenter.coral_filter.k):  # exclude noncoral
                 class_name = coral_segmenter.coral_filter.get_class_names([k], coral_segmenter.coral_filter.classes)[0]
                 if not class_name.endswith(":healthy"):
                     continue
-
                 cc_true_healthy.append(coral_segmenter.coral_cover([
                     gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j] == class_name
                 ], cs=coral_segmenter.crop_space))
-
-                cc_pred_healthy.append(coral_segmenter.coral_cover([
-                    masks[j] for j in range(len(pred_labels)) if pred_labels[j] == class_name
-                ], cs=coral_segmenter.crop_space))
-
             coral_cover_class_healthy_true[i, :] = cc_true_healthy
-            coral_cover_class_healthy_pred[i, :] = cc_pred_healthy
 
-            # Per-taxonomy IoU/Dice/precision/recall (see pixel_confusion_metrics / union_mask above).
-            image_id = get_image_id(image)
-
-            def add_taxonomy_row(taxonomy, true_mask, pred_mask):
-                tp, fp, fn, iou, dice, precision, recall = pixel_confusion_metrics(true_mask, pred_mask)
-                taxonomy_records.append({
-                    "image": image, "image_id": image_id, "taxonomy": taxonomy,
-                    "tp_px": tp, "fp_px": fp, "fn_px": fn,
-                    "iou": iou, "dice_f1": dice, "precision": precision, "recall": recall
-                })
-
-            add_taxonomy_row("all_coral", union_mask(gt_masks), union_mask(masks))
-
-            add_taxonomy_row(
-                "bleached",
-                union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].endswith(":bleached")]),
-                union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j].endswith(":bleached")]),
-            )
-
-            for genus in genus_names:
-                add_taxonomy_row(
-                    genus,
-                    union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j].startswith(genus + ":")]),
-                    union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j].startswith(genus + ":")]),
-                )
-                add_taxonomy_row(
-                    f"{genus}:healthy",
-                    union_mask([gt_masks[j] for j in range(len(gt_labels)) if gt_labels[j] == f"{genus}:healthy"]),
-                    union_mask([masks[j] for j in range(len(pred_labels)) if pred_labels[j] == f"{genus}:healthy"]),
-                )
+            if run_ablation and coral_segmenter.last_ablation_result is not None:
+                masks_abl, labels_abl = coral_segmenter.last_ablation_result
+                pred_labels_abl = coral_segmenter.coral_filter.get_class_names(labels_abl, coral_segmenter.coral_filter.classes)
+                stats_abl = compute_pred_stats(coral_segmenter, masks_abl, pred_labels_abl, gt_masks, gt_labels, genus_names, image, image_id, taxonomy_records_abl)
+                pixel_accuracies_abl[i] = stats_abl['accuracy']
+                coral_cover_pred_abl[i] = stats_abl['coral_cover_pred']
+                pct_bleached_pred_abl[i] = stats_abl['pct_bleached_pred']
+                coral_cover_class_pred_abl[i, :] = stats_abl['cover_pred']
+                coral_cover_class_healthy_pred_abl[i, :] = stats_abl['cover_healthy_pred']
 
             print(f"{i:>4} | {pixel_accuracies[i]:6.3f} | {pixel_accuracies[:i+1].mean():8.3f} "
                 f"| {coral_cover_true[i]:8.3f} | {coral_cover_true[:i+1].mean():12.3f} "
@@ -460,35 +510,49 @@ def train(tune_segmenter: bool = TUNE_SEGMENTER,
 
         print("-" * 78)
 
-        predictions = {
-            'image': test_images,
-            'accuracy': pixel_accuracies,
-            'coral_cover': coral_cover_true,
-            'coral_cover_pred': coral_cover_pred,
-            'pct_bleached_true': pct_bleached_true,
-            'pct_bleached_pred': pct_bleached_pred
-        }
+        def save_predictions(pixel_acc, cc_pred, pctb_pred, cc_class_pred, cc_class_healthy_pred, taxonomy_records_out, suffix):
+            """Builds and saves eval()'s two output files (predictions CSV +
+            taxonomy metrics CSV), under a `suffix`'d filename for the
+            ablation branch -- same schema as the ensemble's own files
+            (ground-truth columns included in both)."""
+            predictions = {
+                'image': test_images,
+                'accuracy': pixel_acc,
+                'coral_cover': coral_cover_true,
+                'coral_cover_pred': cc_pred,
+                'pct_bleached_true': pct_bleached_true,
+                'pct_bleached_pred': pctb_pred
+            }
 
-        # Add genus-wise total coral cover (bleached + healthy)
-        for g, genus in enumerate(genus_names):
-            predictions[f'cover_true__{genus}'] = coral_cover_class_true[:, g]
-            predictions[f'cover_pred__{genus}'] = coral_cover_class_pred[:, g]
+            # Add genus-wise total coral cover (bleached + healthy)
+            for g, genus in enumerate(genus_names):
+                predictions[f'cover_true__{genus}'] = coral_cover_class_true[:, g]
+                predictions[f'cover_pred__{genus}'] = cc_class_pred[:, g]
 
-        # Add genus-wise healthy coral cover only
-        for g, genus in enumerate(genus_names):
-            predictions[f'cover_healthy_true__{genus}'] = coral_cover_class_healthy_true[:, g]
-            predictions[f'cover_healthy_pred__{genus}'] = coral_cover_class_healthy_pred[:, g]
+            # Add genus-wise healthy coral cover only
+            for g, genus in enumerate(genus_names):
+                predictions[f'cover_healthy_true__{genus}'] = coral_cover_class_healthy_true[:, g]
+                predictions[f'cover_healthy_pred__{genus}'] = cc_class_healthy_pred[:, g]
 
-        predictions['image_id'] = [get_image_id(img) for img in test_images]
-        predictions_df = pd.DataFrame(predictions)
-        metadata = load_data(METADATA)
-        metadata['image_id'] = metadata['filename'].str.split('.').str[0]
+            predictions['image_id'] = [get_image_id(img) for img in test_images]
+            predictions_df = pd.DataFrame(predictions)
+            metadata = load_data(METADATA)
+            metadata['image_id'] = metadata['filename'].str.split('.').str[0]
 
-        predictions_data = pd.merge(predictions_df, metadata, on='image_id', how='left')
-        pd.DataFrame(predictions_data).to_csv(f"data/performance/coral_segmenter_predictions.v.{VERSION}.csv", index=False)
+            predictions_data = pd.merge(predictions_df, metadata, on='image_id', how='left')
+            pd.DataFrame(predictions_data).to_csv(f"data/performance/coral_segmenter_predictions{suffix}.v.{VERSION}.csv", index=False)
 
-        taxonomy_df = pd.DataFrame(taxonomy_records)
-        taxonomy_df.to_csv(f"data/performance/coral_segmenter_taxonomy_metrics.v.{VERSION}.csv", index=False)
+            taxonomy_df = pd.DataFrame(taxonomy_records_out)
+            taxonomy_df.to_csv(f"data/performance/coral_segmenter_taxonomy_metrics{suffix}.v.{VERSION}.csv", index=False)
+
+        save_predictions(pixel_accuracies, coral_cover_pred, pct_bleached_pred, coral_cover_class_pred, coral_cover_class_healthy_pred, taxonomy_records, suffix="")
+
+        if run_ablation:
+            save_predictions(
+                pixel_accuracies_abl, coral_cover_pred_abl, pct_bleached_pred_abl,
+                coral_cover_class_pred_abl, coral_cover_class_healthy_pred_abl, taxonomy_records_abl,
+                suffix=f"_ablation_submodel{ABLATION_SUBMODEL}",
+            )
 
 if __name__ == "__main__":
     train(eval=True)
