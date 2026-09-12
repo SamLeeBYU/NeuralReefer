@@ -44,9 +44,27 @@ Run as a standalone script from the repository root:
     python scripts/replicate.py
 """
 import os
+
+# Force GPU/cuDNN determinism, to rule it out as a source of run-to-run drift
+# on top of the fixed seeds elsewhere in the pipeline (see transforms.seeded_rng,
+# config.MASK_TRANSFORM_AUGMENT_SEED). Without this, cuDNN is free to pick
+# convolution/attention algorithms whose reduction order isn't bit-stable
+# across runs, even on the same machine/GPU with identical seeds -- SAM2 is
+# conv/attention-heavy, so this is the most likely place for that to bite.
+# Must be set before any CUDA context is created, so this has to happen before
+# torch (imported transitively below via `main`) touches the GPU.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import json
 
 import pandas as pd
+import torch
+
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+# warn_only=True: SAM2 is third-party and may call an op with no deterministic
+# CUDA implementation -- warn and fall back rather than hard-crashing the run.
+torch.use_deterministic_algorithms(True, warn_only=True)
 
 from config import TRAIN_DIR, ABLATION_SUBMODEL, SAVE_COCO
 from main import inference
