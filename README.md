@@ -41,6 +41,7 @@ Neural Reefer requires **Python 3.9+**. All commands below (and all commands in 
    git clone https://github.com/facebookresearch/sam2.git
    cd sam2 && pip install -e . && cd ..
    ```
+
    Then download the pretrained checkpoint (from inside the `sam2` directory):
    ```bash
    cd sam2/checkpoints && ./download_ckpts.sh && cd ../..
@@ -186,18 +187,18 @@ python scripts/main.py --mode visualize --version <VERSION>
 ## 📄 Reproducing the Paper's Results
 
 These are the exact command-line steps to reproduce the paper's reported LCC IoU/Dice
-numbers on another machine, starting from nothing but this repository.
+numbers on another machine.
 
 1. **Clone this repository** and `cd` into it:
    ```bash
-   git clone https://github.com/your-repo/NeuralReefer.git
+   git clone https://github.com/SamLeeBYU/NeuralReefer.git
    cd NeuralReefer
    ```
 
 2. **Set up the Python environment** (see Installation above for details):
    ```bash
    python -m venv .venv
-   source .venv/bin/activate      # on Windows: .venv\Scripts\activate
+   source .venv/bin/activate      # on Windows: .venv\Scripts\activate; on Git Bash: source .venv/Scripts/activate
    pip install -r requirements.txt
    ```
 
@@ -210,7 +211,7 @@ numbers on another machine, starting from nothing but this repository.
    ```
 
 4. **Edit `SAM2_PATH` in `scripts/config.py`** to the full path where you cloned SAM2 in
-   step 3.
+   step 3. Should just be `SAM2_PATH = "sam2"` if these directions were followed.
 
 5. **Download and extract the training data** from Zenodo
    (<https://doi.org/10.5281/zenodo.19373197>) into the repository root, so that
@@ -237,6 +238,10 @@ numbers on another machine, starting from nothing but this repository.
    lcc = df[df['taxonomy'] == 'lcc']
    print(f\"Test-set LCC IoU: {lcc['iou'].mean():.4f}  |  Dice: {lcc['dice_f1'].mean():.4f}  (n={len(lcc)} images)\")
    "
+   ```
+   Or, in a single line:
+   ```bash
+   python -c "import pandas as pd; df = pd.read_csv('yellowfin_segment.v18i.coco-segmentation/train/inference/annotations_coco_test_metrics.csv'); lcc = df[df['taxonomy'] == 'lcc']; iou = lcc['iou'].mean(); dice = lcc['dice_f1'].mean(); n = len(lcc); print(f'Test-set LCC IoU: {iou:.4f} | Dice: {dice:.4f} (n={n} images)')"
    ```
 
 ---
