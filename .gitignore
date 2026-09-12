@@ -1,3 +1,5 @@
+scripts/config.py
+
 # Miscellaneous
 scripts/ensemble_aggregation_sim.R
 scripts/verify_split_integrity.py

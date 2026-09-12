@@ -9,6 +9,7 @@ Pillow>=9.5
 matplotlib>=3.7
 seaborn>=0.12
 tqdm>=4.65
+pycocotools>=2.0.7
 supervision>=0.20
 shapely>=2.0
 geopandas>=0.14

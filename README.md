@@ -22,8 +22,13 @@ Neural Reefer requires **Python 3.9+**. All commands below (and all commands in 
    pip install -r requirements.txt
    ```
    This installs `torch`, `torchvision`, `opencv-python`, `numpy`, `pandas`, `scikit-learn`,
-   `scikit-optimize`, `Pillow`, `matplotlib`, `seaborn`, `tqdm`, `supervision`, `shapely`,
-   `geopandas`, and `contextily`.
+   `scikit-optimize`, `Pillow`, `matplotlib`, `seaborn`, `tqdm`, `pycocotools`, `supervision`,
+   `shapely`, `geopandas`, and `contextily`.
+   - `pycocotools` occasionally fails to build from source on Windows if no C++ build tools
+     are installed; recent versions (>=2.0.7) ship prebuilt Windows wheels on PyPI, so a plain
+     `pip install -r requirements.txt` should work. If it still fails to build, install the
+     [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+     (or run `pip install pycocotools-windows` as a fallback) and retry.
    - If you have an NVIDIA GPU, install a CUDA-enabled build of `torch`/`torchvision` **first**
      by following the selector at [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/),
      then run `pip install -r requirements.txt` — the CPU wheel installed by that command will
@@ -40,6 +45,18 @@ Neural Reefer requires **Python 3.9+**. All commands below (and all commands in 
    ```bash
    cd sam2/checkpoints && ./download_ckpts.sh && cd ../..
    ```
+   - **Windows:** `download_ckpts.sh` is a bash script and will not run under plain `cmd`/
+     PowerShell. If Git for Windows is installed, run it through Git Bash instead:
+     ```powershell
+     cd sam2\checkpoints
+     "C:\Program Files\Git\bin\bash.exe" download_ckpts.sh
+     cd ..\..
+     ```
+     Otherwise, download just the checkpoint this pipeline actually uses
+     (`sam2.1_hiera_large.pt`) directly, from inside `sam2\checkpoints`:
+     ```powershell
+     Invoke-WebRequest -Uri "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt" -OutFile "sam2.1_hiera_large.pt"
+     ```
 
 4. **Point `scripts/config.py` at your local SAM2 checkout** — edit this line to the
    full path where you cloned it in step 3:
@@ -47,9 +64,10 @@ Neural Reefer requires **Python 3.9+**. All commands below (and all commands in 
    SAM2_PATH = "/path/to/sam2"  # Replace with the full path
    ```
 
-5. **Run inference** — pretrained coral filter models, class labels, and tuned SAM2
-   hyperparameters are already committed under `models/` and `data/segmentation/`, so no
-   training is required to get started. Try it on the bundled example image:
+5. **Run inference** — pretrained coral filter models, class labels/remap tables
+   (`data/classes_v18.json`, `data/remap.json`), and tuned SAM2 hyperparameters are already
+   committed in this repository (under `models/`, `data/`, and `data/segmentation/`
+   respectively). Try it on the bundled example image:
    ```bash
    python scripts/example.py
    ```
@@ -183,7 +201,8 @@ numbers on another machine, starting from nothing but this repository.
    pip install -r requirements.txt
    ```
 
-3. **Install SAM2** and download its checkpoint:
+3. **Install SAM2** and download its checkpoint (see the Windows note under Installation
+   step 3 above if `./download_ckpts.sh` doesn't run on your machine):
    ```bash
    git clone https://github.com/facebookresearch/sam2.git
    cd sam2 && pip install -e . && cd ..
@@ -197,7 +216,10 @@ numbers on another machine, starting from nothing but this repository.
    (<https://doi.org/10.5281/zenodo.19373197>) into the repository root, so that
    `yellowfin_segment.v18i.coco-segmentation/train/` (containing the 552 annotated images and
    `_annotations.coco.json`) sits directly under `NeuralReefer/` — this must match `TRAIN_DIR`
-   in `config.py`.
+   in `config.py`. This archive is imagery/annotations only — do **not** copy any
+   `classes*.json`/`remap.json`-like files it may contain into `data/`; the ones the code
+   actually reads (`data/classes_v18.json`, `data/remap.json`) already ship with the git
+   repository from step 1 and must not be overwritten.
 
 6. **Run the full reproduction script.** This uses the pretrained submodels + ensemble
    already committed under `models/filter_res34_5_v18/` — no training required — running SAM2

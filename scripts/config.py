@@ -13,7 +13,7 @@ HYPERPARAM_FILE = "data/segmentation/SAM2hyperparameters.json"
 #Needed to reference the SAM2 backbone
 #CHANGE THIS to the full path where you cloned SAM2 (see README's Installation
 #section, step 3) -- e.g. "/home/you/sam2" or "C:\\Users\\you\\sam2"
-SAM2_PATH = "/path/to/sam2"
+SAM2_PATH = "C:\\Users\\samle\\OneDrive\\Desktop\\Archive\\sam2"  #"/path/to/sam2"
 SAM2_CONFIG_PATH = "configs/sam2.1/sam2.1_hiera_l.yaml"
 SAM2_CHECKPOINT_PATH = f"{SAM2_PATH}/checkpoints/sam2.1_hiera_large.pt"
 
