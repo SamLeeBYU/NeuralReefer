@@ -1,0 +1,182 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{reakakudla1997}
+\citation{costanza2014,sing2022}
+\citation{burke2011reefs,vega2025,hughes2017}
+\citation{spady2025,birkart2025}
+\citation{strain2019,bostrom2020}
+\providecommand \oddpage@label [2]{}
+\Newlabel{1}{a}
+\Newlabel{2}{b}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\citation{rivera2025}
+\citation{cresswell2021,mcdonald2010}
+\citation{asner2022,ayad2025}
+\citation{raber2019}
+\citation{josephitis2012}
+\citation{ravi2024sam2}
+\citation{beijbom2012}
+\citation{kohlergill2006}
+\citation{alonso2017,alonso2019}
+\citation{king2018}
+\citation{zhang2022,kopecky2023}
+\citation{zhang2024,li2024,lawson2025,zheng2025}
+\citation{macrohonhung2025}
+\citation{zheng2024}
+\citation{kirillov2023segment}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{2}{section.2}\protected@file@percent }
+\citation{roboflow2020}
+\citation{ravi2024sam2}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methods}{3}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Data}{3}{subsection.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Representative Yellowfin imagery from the SR4 region of Majuro Atoll, Marshall Islands. \textcolor {red}{Panels are placed at their true acquisition time (horizontal axis) and logged camera depth below the water surface (vertical axis), selected to spread broadly across both dimensions; the two are only weakly correlated in this survey (depth and time-of-day are governed independently by the ASV's transect path and mission duration).} Images illustrate variation in coral cover, species composition, and environmental conditions. \textcolor {red}{Each image is a 1024$\times $1024 pixel top-down frame; across the SR4 survey, Yellowfin's depth below the water surface ranged from 1.6--18.7\,m (\ref {app:depth}; Figure~\ref {fig:depth_accuracy}). \sbox  \revdelbox {Camera altitude above the reef substrate itself was not instrumented, so we are unable to report a fixed ground sample distance or physical scale bar for these images; colony sizes should be interpreted qualitatively from the annotated examples in Figure~\ref {fig:qual-results} rather than assuming a constant scale across panels.}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox  All photos in the SR4 survey were captured during a single mid-morning-to-early-afternoon window (11:18--13:54 local time).}}}{4}{figure.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:raw-yellowfin-examples}{{1}{4}{Representative Yellowfin imagery from the SR4 region of Majuro Atoll, Marshall Islands. \revadd {Panels are placed at their true acquisition time (horizontal axis) and logged camera depth below the water surface (vertical axis), selected to spread broadly across both dimensions; the two are only weakly correlated in this survey (depth and time-of-day are governed independently by the ASV's transect path and mission duration).} Images illustrate variation in coral cover, species composition, and environmental conditions. \revadd {Each image is a 1024$\times $1024 pixel top-down frame; across the SR4 survey, Yellowfin's depth below the water surface ranged from 1.6--18.7\,m (\ref {app:depth}; Figure~\ref {fig:depth_accuracy}). \revdel {Camera altitude above the reef substrate itself was not instrumented, so we are unable to report a fixed ground sample distance or physical scale bar for these images; colony sizes should be interpreted qualitatively from the annotated examples in Figure~\ref {fig:qual-results} rather than assuming a constant scale across panels.} All photos in the SR4 survey were captured during a single mid-morning-to-early-afternoon window (11:18--13:54 local time).}}{figure.caption.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Mask counts and average coral cover by morpho-taxonomic and bleaching status for training (441 images) and test sets (111 images).}}{5}{table.caption.2}\protected@file@percent }
+\newlabel{tab:mask-cover}{{1}{5}{Mask counts and average coral cover by morpho-taxonomic and bleaching status for training (441 images) and test sets (111 images)}{table.caption.2}{}}
+\citation{zheng2024}
+\citation{usis10k2024}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Distribution of the number of manual annotations per image in the training set (left) and test set (right). The dashed vertical line indicates the median number of annotations (20 and 19 for the training and test sets, respectively). Both splits exhibit high variance, \sbox  \revdelbox {yielding to}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox \textcolor {red}{reflecting} the complexity of the problem at hand.}}{6}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:annotations}{{2}{6}{Distribution of the number of manual annotations per image in the training set (left) and test set (right). The dashed vertical line indicates the median number of annotations (20 and 19 for the training and test sets, respectively). Both splits exhibit high variance, \revdel {yielding to}\revadd {reflecting} the complexity of the problem at hand}{figure.caption.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Distribution of live coral cover (LCC) across training and test sets, expressed as the percentage of image area. Density curves are overlaid with vertical dashed lines marking the median LCC in each split (\sbox  \revdelbox {31.5\% and 33.3\%}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox \textcolor {red}{29.5\% and 30.6\%} for the training and test sets, respectively). The distributions are broadly similar, while the differences between the two distributions reflect the natural sampling variability seen throughout the Majuro survey.}}{7}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:data_coral_cover}{{3}{7}{Distribution of live coral cover (LCC) across training and test sets, expressed as the percentage of image area. Density curves are overlaid with vertical dashed lines marking the median LCC in each split (\revdel {31.5\% and 33.3\%}\revadd {29.5\% and 30.6\%} for the training and test sets, respectively). The distributions are broadly similar, while the differences between the two distributions reflect the natural sampling variability seen throughout the Majuro survey}{figure.caption.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Machine learning pipeline}{8}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}SAM2-Based Segmentation}{8}{subsubsection.3.2.1}\protected@file@percent }
+\newlabel{sec:sam2}{{3.2.1}{8}{SAM2-Based Segmentation}{subsubsection.3.2.1}{}}
+\newlabel{RF1}{9}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces A visualization of the model pipeline, showing the progression of inference for a single image. Blue circle nodes represent modeling decisions made by the researcher. Images collected by the Yellowfin Surfzone ASV are paired with spatial metadata, preprocessed, and passed through a SAM2-based mask proposal system optimized for detecting both large and small coral structures. Each mask is cropped, augmented, and passed to an ensemble of CNN submodels, each with a ResNet backbone (BB) and fully connected (FC) output layer producing class logits of a prespecified dimension for each submodel $m=1,\ldots  ,M$. These logits are then projected onto the simplex through a softmax activation function to yield valid probability distributions. The probability matrices are then aggregated through a weighted ensemble to produce final mask classifications over 17 coral-related categories through a learned $M\times K$ weight matrix and model weight vector, $\bm  {\alpha }$. Masks predicted as ``non-coral'' are rejected prior to the final segmentation map construction. We compute post hoc ecological statistics such as coral cover stratified by morpho-taxonomic class and bleaching status to generate new labeled datasets for analysis.}}{9}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:pipeline}{{4}{9}{A visualization of the model pipeline, showing the progression of inference for a single image. Blue circle nodes represent modeling decisions made by the researcher. Images collected by the Yellowfin Surfzone ASV are paired with spatial metadata, preprocessed, and passed through a SAM2-based mask proposal system optimized for detecting both large and small coral structures. Each mask is cropped, augmented, and passed to an ensemble of CNN submodels, each with a ResNet backbone (BB) and fully connected (FC) output layer producing class logits of a prespecified dimension for each submodel $m=1,\ldots ,M$. These logits are then projected onto the simplex through a softmax activation function to yield valid probability distributions. The probability matrices are then aggregated through a weighted ensemble to produce final mask classifications over 17 coral-related categories through a learned $M\times K$ weight matrix and model weight vector, $\bm {\alpha }$. Masks predicted as ``non-coral'' are rejected prior to the final segmentation map construction. We compute post hoc ecological statistics such as coral cover stratified by morpho-taxonomic class and bleaching status to generate new labeled datasets for analysis}{figure.caption.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Tuned parameters for SAM2 segmentation and preprocessing augmentations. Segmentation parameters are tuned separately for large and small object detection, while postprocessing and augmentation parameters are shared.}}{10}{table.caption.6}\protected@file@percent }
+\newlabel{tab:sam2-tuned-params}{{2}{10}{Tuned parameters for SAM2 segmentation and preprocessing augmentations. Segmentation parameters are tuned separately for large and small object detection, while postprocessing and augmentation parameters are shared}{table.caption.6}{}}
+\newlabel{eq:score}{{1}{11}{SAM2-Based Segmentation}{equation.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Mask Consolidation}{11}{subsubsection.3.2.2}\protected@file@percent }
+\citation{chapelle2001vicinal,zhang2018mixup,cubuk2019autoaugment}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3}Classification Model}{12}{subsubsection.3.2.3}\protected@file@percent }
+\newlabel{sec:cnn}{{3.2.3}{12}{Classification Model}{subsubsection.3.2.3}{}}
+\newlabel{RF2}{13}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces The 552 annotated Yellowfin images are divided into training (441) and test (111) subsets. Segmentation masks are generated with SAM2 under tuned hyperparameters, and mask candidates are further partitioned into training, validation, and held-out sets. After bootstrapping and augmentation ($\phi (\cdot )$), each CNN submodel is trained independently on cropped mask regions, producing class-probability outputs from the function, $\hat  {f}^{(m)}(\cdot )$. These outputs are aggregated into an $N \times M \times K$ matrix of ensemble probabilities, from which the ensemble optimizer learns calibrated weights to combine submodels. Final performance is assessed out-of-sample, first on mask discrimination ability of the \emph  {ensemble model} itself and then on the full machine vision pipeline (see Figure~\ref {fig:pipeline}), which integrates mask classification with segmentation to produce live coral cover estimates.}}{13}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:training_pipeline}{{5}{13}{The 552 annotated Yellowfin images are divided into training (441) and test (111) subsets. Segmentation masks are generated with SAM2 under tuned hyperparameters, and mask candidates are further partitioned into training, validation, and held-out sets. After bootstrapping and augmentation ($\phi (\cdot )$), each CNN submodel is trained independently on cropped mask regions, producing class-probability outputs from the function, $\hat {f}^{(m)}(\cdot )$. These outputs are aggregated into an $N \times M \times K$ matrix of ensemble probabilities, from which the ensemble optimizer learns calibrated weights to combine submodels. Final performance is assessed out-of-sample, first on mask discrimination ability of the \emph {ensemble model} itself and then on the full machine vision pipeline (see Figure~\ref {fig:pipeline}), which integrates mask classification with segmentation to produce live coral cover estimates}{figure.caption.7}{}}
+\citation{he2016deep}
+\citation{wolpert1992stacked}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces CNN Classifier Architecture and Training Hyperparameters}}{15}{table.caption.8}\protected@file@percent }
+\newlabel{tab:cnn-architecture}{{3}{15}{CNN Classifier Architecture and Training Hyperparameters}{table.caption.8}{}}
+\citation{wolpert1992stacked,dietterich2000ensemble}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4}Ensemble Aggregation}{16}{subsubsection.3.2.4}\protected@file@percent }
+\newlabel{sec:ensemble_aggregation}{{3.2.4}{16}{Ensemble Aggregation}{subsubsection.3.2.4}{}}
+\newlabel{eq:aggregation}{{2}{16}{Ensemble Aggregation}{equation.2}{}}
+\newlabel{eq:normalization}{{3}{16}{Ensemble Aggregation}{equation.3}{}}
+\citation{hunterlange2004mm}
+\newlabel{eq:min_problem}{{4}{17}{Ensemble Aggregation}{equation.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.5}Ensemble Parameter Estimation}{17}{subsubsection.3.2.5}\protected@file@percent }
+\citation{lipton2014fbeta}
+\citation{lipton2014fbeta}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Heatmap of class-specific ensemble responsibilities. Rows correspond to the five CNN submodels, with percentages indicating each model's overall contribution to the ensemble (i.e., $\alpha _m$). Columns correspond to the 17 classes (morpho-taxonomic class $\times $ bleaching status plus non-coral), where the sum over each model's contribution is 1, by construction. Color intensity reflects the relative class-specific weights $\bm  {w}_m$, showing that individual submodels specialize in different subsets of taxa, while the ensemble balances these contributions to improve robustness.}}{18}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:ensemble-heatmap}{{6}{18}{Heatmap of class-specific ensemble responsibilities. Rows correspond to the five CNN submodels, with percentages indicating each model's overall contribution to the ensemble (i.e., $\alpha _m$). Columns correspond to the 17 classes (morpho-taxonomic class $\times $ bleaching status plus non-coral), where the sum over each model's contribution is 1, by construction. Color intensity reflects the relative class-specific weights $\bm {w}_m$, showing that individual submodels specialize in different subsets of taxa, while the ensemble balances these contributions to improve robustness}{figure.caption.9}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces In-sample and out-of-sample performance of individual models and the ensemble.}}{19}{table.caption.10}\protected@file@percent }
+\newlabel{tab:model-performance}{{4}{19}{In-sample and out-of-sample performance of individual models and the ensemble}{table.caption.10}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Coral Cover Estimation}{19}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:reconstruct}{{3.3}{19}{Coral Cover Estimation}{subsection.3.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Confusion matrix summarizing ensemble discrimination on an out-of-sample validation set across bleaching status. Rows denote ground-truth labels (non-coral, bleached coral, and healthy coral), while columns indicate predicted classes. Cell values represent counts and row-normalized percentages. \textcolor {red}{The ensemble achieves high recall for both bleached (87.2\%) and healthy coral (86.2\%) while maintaining strong rejection of non-coral instances (96.4\%).}}}{20}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:discrimination-bleaching}{{7}{20}{Confusion matrix summarizing ensemble discrimination on an out-of-sample validation set across bleaching status. Rows denote ground-truth labels (non-coral, bleached coral, and healthy coral), while columns indicate predicted classes. Cell values represent counts and row-normalized percentages. \revadd {The ensemble achieves high recall for both bleached (87.2\%) and healthy coral (86.2\%) while maintaining strong rejection of non-coral instances (96.4\%).}}{figure.caption.11}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Confusion matrix summarizing ensemble discrimination on an out-of-sample validation set by coral morpho-taxonomic class. Rows denote ground-truth morpho-taxonomic class labels (plus non-coral and ``oddball'' classes), and columns denote predicted classes. \textcolor {red}{The diagonal dominance indicates strong overall performance, with per-genus recall ranging from 73.6\% (Mounding) to 93.3\% (Finger Porites and Pocillopora), and above 80\% for all genera except Mounding corals, whose fine-branching growth form is more frequently confused with other classes.} Errors are concentrated among morphologically similar classes, consistent with expectations.}}{21}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:discrimination-genus}{{8}{21}{Confusion matrix summarizing ensemble discrimination on an out-of-sample validation set by coral morpho-taxonomic class. Rows denote ground-truth morpho-taxonomic class labels (plus non-coral and ``oddball'' classes), and columns denote predicted classes. \revadd {The diagonal dominance indicates strong overall performance, with per-genus recall ranging from 73.6\% (Mounding) to 93.3\% (Finger Porites and Pocillopora), and above 80\% for all genera except Mounding corals, whose fine-branching growth form is more frequently confused with other classes.} Errors are concentrated among morphologically similar classes, consistent with expectations}{figure.caption.12}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Results}{22}{section.4}\protected@file@percent }
+\newlabel{sec:results}{{4}{22}{Results}{section.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Qualitative examples from the held-out test set, comparing raw Yellowfin images, expert annotations, and machine vision pipeline predictions. Lighter shades within a genus indicate bleached status; non-coral masks are rejected prior to final output and are not shown.}}{23}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:qual-results}{{9}{23}{Qualitative examples from the held-out test set, comparing raw Yellowfin images, expert annotations, and machine vision pipeline predictions. Lighter shades within a genus indicate bleached status; non-coral masks are rejected prior to final output and are not shown}{figure.caption.13}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Predicted live coral cover distributions for training and held-out test images. Curves are kernel density estimates (estimated with a Gaussian kernel) of the fraction of image area labeled as live coral by the machine vision pipeline. Vertical dashed lines mark sample medians (\sbox  \revdelbox {train $\approx $ 24.0\%, test $\approx $ 26.8\%}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox \textcolor {red}{train $\approx $ 23.8\%, test $\approx $ 25.9\%}). The large overlap indicates out-of-sample generalization of the cover distribution, with minor shifts consistent with sampling variability between splits (compare Figure~\ref {fig:data_coral_cover}).}}{24}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:lcc_train_test}{{10}{24}{Predicted live coral cover distributions for training and held-out test images. Curves are kernel density estimates (estimated with a Gaussian kernel) of the fraction of image area labeled as live coral by the machine vision pipeline. Vertical dashed lines mark sample medians (\revdel {train $\approx $ 24.0\%, test $\approx $ 26.8\%}\revadd {train $\approx $ 23.8\%, test $\approx $ 25.9\%}). The large overlap indicates out-of-sample generalization of the cover distribution, with minor shifts consistent with sampling variability between splits (compare Figure~\ref {fig:data_coral_cover})}{figure.caption.14}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Calibration of predicted vs.\ observed live coral cover for training (left) and held-out test (right). Each point is one image; axes show LCC as a percent of image area. The dashed line marks perfect calibration (1:1). \sbox  \revdelbox {The LOESS curve indicates}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox \textcolor {red}{The fitted linear trend indicates} mild overprediction at intermediate cover (20--40\%) and underestimation as cover approaches saturation ($\geq $80\%), a pattern consistent across splits and aligned with the negative mean bias reported in Table~\ref {tab:bias-decomposition}.}}{25}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:lcc-trend}{{11}{25}{Calibration of predicted vs.\ observed live coral cover for training (left) and held-out test (right). Each point is one image; axes show LCC as a percent of image area. The dashed line marks perfect calibration (1:1). \revdel {The LOESS curve indicates}\revadd {The fitted linear trend indicates} mild overprediction at intermediate cover (20--40\%) and underestimation as cover approaches saturation ($\geq $80\%), a pattern consistent across splits and aligned with the negative mean bias reported in Table~\ref {tab:bias-decomposition}}{figure.caption.15}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Distributions of pixel-level segmentation accuracy for training and held-out test images. Accuracy is the per-image fraction of pixels correctly labeled as coral or non-coral. Curves are kernel density estimates (estimated with a Gaussian kernel). Vertical dashed lines mark sample medians (\sbox  \revdelbox {train: 93.3\%, test: 92.4\%}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox \textcolor {red}{train: 93.3\%, test: 92.0\%}). The substantial overlap and small train--test shift indicate stable generalization of the segmentation stage.}}{26}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:accuracy}{{12}{26}{Distributions of pixel-level segmentation accuracy for training and held-out test images. Accuracy is the per-image fraction of pixels correctly labeled as coral or non-coral. Curves are kernel density estimates (estimated with a Gaussian kernel). Vertical dashed lines mark sample medians (\revdel {train: 93.3\%, test: 92.4\%}\revadd {train: 93.3\%, test: 92.0\%}). The substantial overlap and small train--test shift indicate stable generalization of the segmentation stage}{figure.caption.16}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces True vs.\ predicted bleached coral cover (BCC) by split. \sbox  \revdelbox {Curves show kernel density estimates (estimated with a Gaussian kernel) of the fraction of image area labeled as bleached; }\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox Vertical dashed lines mark sample medians (\textcolor {red}{Train: Actual $=4.4\%$, Predicted $=3.0\%$; Test: Actual $=4.5\%$, Predicted $=1.9\%$}). Distributions are strongly right-skewed, reflecting many scenes with little bleaching (or little coral). Predicted BCC tracks the empirical shape but is left-shifted (lower medians and more mass near zero), indicating conservative bleached-area estimates. The shift is larger out of sample and is consistent with the LCC underestimation in dense scenes (Figures~\ref {fig:lcc_train_test}, \ref {fig:lcc-trend}).}}{27}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:bcc_results}{{13}{27}{True vs.\ predicted bleached coral cover (BCC) by split. \revdel {Curves show kernel density estimates (estimated with a Gaussian kernel) of the fraction of image area labeled as bleached; }Vertical dashed lines mark sample medians (\revadd {Train: Actual $=4.4\%$, Predicted $=3.0\%$; Test: Actual $=4.5\%$, Predicted $=1.9\%$}). Distributions are strongly right-skewed, reflecting many scenes with little bleaching (or little coral). Predicted BCC tracks the empirical shape but is left-shifted (lower medians and more mass near zero), indicating conservative bleached-area estimates. The shift is larger out of sample and is consistent with the LCC underestimation in dense scenes (Figures~\ref {fig:lcc_train_test}, \ref {fig:lcc-trend})}{figure.caption.17}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Bias decomposition of predicted coral cover by morpho-taxonomic class and bleaching status for training and test sets. Mean biases decompose into bleached and healthy components; standard errors (SE) are reported for morpho-taxonomic class totals and marginal sums.}}{28}{table.caption.18}\protected@file@percent }
+\newlabel{tab:bias-decomposition}{{5}{28}{Bias decomposition of predicted coral cover by morpho-taxonomic class and bleaching status for training and test sets. Mean biases decompose into bleached and healthy components; standard errors (SE) are reported for morpho-taxonomic class totals and marginal sums}{table.caption.18}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Segmentation Quality: IoU and Dice}{29}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:iou_dice}{{4.1}{29}{Segmentation Quality: IoU and Dice}{subsection.4.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Pixel-level IoU, Dice, precision, and recall by taxonomic class, macro-averaged over the 111-image held-out test set.}}{29}{table.caption.19}\protected@file@percent }
+\newlabel{tab:iou-dice-taxonomy}{{6}{29}{Pixel-level IoU, Dice, precision, and recall by taxonomic class, macro-averaged over the 111-image held-out test set}{table.caption.19}{}}
+\citation{zheng2024}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Live coral cover (coral vs.\ non-coral) segmentation quality: NeuralReefer vs.\ CoralSCOP.}}{30}{table.caption.20}\protected@file@percent }
+\newlabel{tab:coralscop-comparison}{{7}{30}{Live coral cover (coral vs.\ non-coral) segmentation quality: NeuralReefer vs.\ CoralSCOP}{table.caption.20}{}}
+\citation{zheng2024}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces IoU exceedance curves for live coral cover segmentation on the held-out test set: the fraction of test images attaining at least a given IoU threshold, for NeuralReefer vs.\ CoralSCOP. NeuralReefer's curve dominates CoralSCOP's at every threshold.}}{31}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:iou-exceedance}{{14}{31}{IoU exceedance curves for live coral cover segmentation on the held-out test set: the fraction of test images attaining at least a given IoU threshold, for NeuralReefer vs.\ CoralSCOP. NeuralReefer's curve dominates CoralSCOP's at every threshold}{figure.caption.21}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Limitations \& Future Work}{31}{section.5}\protected@file@percent }
+\newlabel{sec:limitations}{{5}{31}{Limitations \& Future Work}{section.5}{}}
+\citation{wehrmann2018hierarchical,deng2014large,wang2016cnn,nam2014large}
+\citation{peerj954}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion \& Discussion}{33}{section.6}\protected@file@percent }
+\@writefile{toc}{\let\numberline\tmptocnumberline}
+\@writefile{toc}{\contentsline {section}{\numberline {Appendix~A}Robustness to Spatial Dependence}{34}{appendix.A}\protected@file@percent }
+\newlabel{app:spatial}{{Appendix~A}{34}{Robustness to Spatial Dependence}{appendix.A}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {A.8}{\ignorespaces Live coral cover IoU, Dice, and pixel accuracy on the test set, with vs.\ without spatially-contaminated test images excluded.}}{34}{table.caption.24}\protected@file@percent }
+\newlabel{tab:spatial-robustness}{{A.8}{34}{Live coral cover IoU, Dice, and pixel accuracy on the test set, with vs.\ without spatially-contaminated test images excluded}{table.caption.24}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {Appendix~B}Segmentation Accuracy vs.\ Water Depth}{35}{appendix.B}\protected@file@percent }
+\newlabel{app:depth}{{Appendix~B}{35}{Segmentation Accuracy vs.\ Water Depth}{appendix.B}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {Appendix~C}EM/MM Derivation for Ensemble Parameter Estimation}{35}{appendix.C}\protected@file@percent }
+\newlabel{app:em_derivation}{{Appendix~C}{35}{EM/MM Derivation for Ensemble Parameter Estimation}{appendix.C}{}}
+\newlabel{eq:responsibility}{{C.3}{35}{Data Availability}{equation.C.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {B.15}{\ignorespaces Pixel-level segmentation accuracy versus water depth for training (teal) and held-out test (salmon) images. \sbox  \revdelbox {Points denote per-image accuracy. }\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox The x-axis follows Yellowfin's native sign convention for depth below the water surface (more negative = deeper; 0 = surface)\sbox  \revdelbox {; this is not a measure of distance to the reef substrate (see text)}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox . \emph  {Left:} full range of observed depths and accuracies. \emph  {Right:} \sbox  \revdelbox {the same data restricted to depth 0--7.5\,m and accuracy 75--100\%, which together contain 92.0\% of all images, with a fitted linear trend per split (both are close to flat)}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox \textcolor {red}{subset containing 92.0\% of all images (0--7.5\,m depth, 75--100\% accuracy) with a nearly flat linear trend}. Across the sampled depths\sbox  \revdelbox { (predominantly shallow water)}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox , accuracy remains high with no systematic degradation\sbox  \revdelbox { as depth increases}\makebox  [0pt][l]{\raisebox  {0.45ex}{\rule  {\wd \revdelbox }{0.4pt}}}\usebox  \revdelbox .}}{36}{figure.caption.25}\protected@file@percent }
+\newlabel{fig:depth_accuracy}{{B.15}{36}{Pixel-level segmentation accuracy versus water depth for training (teal) and held-out test (salmon) images. \revdel {Points denote per-image accuracy. }The x-axis follows Yellowfin's native sign convention for depth below the water surface (more negative = deeper; 0 = surface)\revdel {; this is not a measure of distance to the reef substrate (see text)}. \emph {Left:} full range of observed depths and accuracies. \emph {Right:} \revdel {the same data restricted to depth 0--7.5\,m and accuracy 75--100\%, which together contain 92.0\% of all images, with a fitted linear trend per split (both are close to flat)}\revadd {subset containing 92.0\% of all images (0--7.5\,m depth, 75--100\% accuracy) with a nearly flat linear trend}. Across the sampled depths\revdel { (predominantly shallow water)}, accuracy remains high with no systematic degradation\revdel { as depth increases}}{figure.caption.25}{}}
+\citation{hunterlange2004mm}
+\citation{hunterlange2004mm}
+\newlabel{eq:q_function}{{C.4}{37}{Data Availability}{equation.C.4}{}}
+\newlabel{eq:alpha_update}{{C.5}{37}{Data Availability}{equation.C.5}{}}
+\newlabel{eq:w_update}{{C.6}{37}{Data Availability}{equation.C.6}{}}
+\newlabel{eq:w_surrogate}{{C.11}{37}{Data Availability}{equation.C.11}{}}
+\newlabel{eq:w_mm_update}{{C.13}{38}{Data Availability}{equation.C.13}{}}
+\bibstyle{apalike}
+\bibdata{references.bib}
+\bibcite{alonso2017}{{1}{2017}{{Alonso et~al.}}{{}}}
+\bibcite{alonso2019}{{2}{2019}{{Alonso et~al.}}{{}}}
+\bibcite{asner2022}{{3}{2022}{{Asner et~al.}}{{}}}
+\bibcite{ayad2025}{{4}{2025}{{Ayad et~al.}}{{}}}
+\bibcite{beijbom2012}{{5}{2012}{{Beijbom et~al.}}{{}}}
+\bibcite{birkart2025}{{6}{2025}{{Birkart and {\'A}lvarez-Filip}}{{}}}
+\bibcite{bostrom2020}{{7}{2020}{{Bostr{\"o}m-Einarsson et~al.}}{{}}}
+\bibcite{burke2011reefs}{{8}{2011}{{Burke et~al.}}{{}}}
+\bibcite{chapelle2001vicinal}{{9}{2001}{{Chapelle et~al.}}{{}}}
+\bibcite{costanza2014}{{10}{2014}{{Costanza et~al.}}{{}}}
+\bibcite{cresswell2021}{{11}{2021}{{Cresswell et~al.}}{{}}}
+\bibcite{cubuk2019autoaugment}{{12}{2019}{{Cubuk et~al.}}{{}}}
+\bibcite{deng2014large}{{13}{2014}{{Deng et~al.}}{{}}}
+\bibcite{dietterich2000ensemble}{{14}{2000}{{Dietterich}}{{}}}
+\bibcite{he2016deep}{{15}{2016}{{He et~al.}}{{}}}
+\bibcite{hughes2017}{{16}{2017}{{Hughes et~al.}}{{}}}
+\bibcite{hunterlange2004mm}{{17}{2004}{{Hunter and Lange}}{{}}}
+\bibcite{peerj954}{{18}{2015}{{Jokiel et~al.}}{{}}}
+\bibcite{josephitis2012}{{19}{2012}{{Josephitis et~al.}}{{}}}
+\bibcite{king2018}{{20}{2018}{{King et~al.}}{{}}}
+\bibcite{kirillov2023segment}{{21}{2023}{{Kirillov et~al.}}{{}}}
+\bibcite{kohlergill2006}{{22}{2006}{{Kohler and Gill}}{{}}}
+\bibcite{kopecky2023}{{23}{2023}{{Kopecky et~al.}}{{}}}
+\bibcite{lawson2025}{{24}{2025}{{Lawson et~al.}}{{}}}
+\bibcite{li2024}{{25}{2024}{{Li et~al.}}{{}}}
+\bibcite{usis10k2024}{{26}{2024}{{Lian et~al.}}{{}}}
+\bibcite{lipton2014fbeta}{{27}{2014}{{Lipton et~al.}}{{}}}
+\bibcite{macrohonhung2025}{{28}{2025}{{Macrohon and Hung}}{{}}}
+\bibcite{mcdonald2010}{{29}{2010}{{McDonald-Madden et~al.}}{{}}}
+\bibcite{nam2014large}{{30}{2014}{{Nam et~al.}}{{}}}
+\bibcite{raber2019}{{31}{2019}{{Raber and Schill}}{{}}}
+\bibcite{ravi2024sam2}{{32}{2024}{{Ravi et~al.}}{{}}}
+\bibcite{reakakudla1997}{{33}{1997}{{Reaka-Kudla}}{{}}}
+\bibcite{rivera2025}{{34}{2025}{{Rivera-Sosa et~al.}}{{}}}
+\bibcite{roboflow2020}{{35}{2020}{{Roboflow}}{{}}}
+\bibcite{sing2022}{{36}{2022}{{Sing~Wong et~al.}}{{}}}
+\bibcite{spady2025}{{37}{2025}{{Spady et~al.}}{{}}}
+\bibcite{strain2019}{{38}{2019}{{Strain et~al.}}{{}}}
+\bibcite{vega2025}{{39}{2025}{{Vega~Thurber et~al.}}{{}}}
+\bibcite{wang2016cnn}{{40}{2016}{{Wang et~al.}}{{}}}
+\bibcite{wehrmann2018hierarchical}{{41}{2018}{{Wehrmann et~al.}}{{}}}
+\bibcite{wolpert1992stacked}{{42}{1992}{{Wolpert}}{{}}}
+\bibcite{zhang2018mixup}{{43}{2018}{{Zhang et~al.}}{{}}}
+\bibcite{zhang2022}{{44}{2022}{{Zhang et~al.}}{{}}}
+\bibcite{zhang2024}{{45}{2024}{{Zhang et~al.}}{{}}}
+\bibcite{zheng2024}{{46}{2024}{{Zheng et~al.}}{{}}}
+\bibcite{zheng2025}{{47}{2025}{{Zheng et~al.}}{{}}}
+\gdef \@abspage@last{42}

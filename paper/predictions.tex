@@ -15,16 +15,28 @@
 \renewcommand{\arraystretch}{0.5}
 \newcommand{\qualRowSpace}{0.1em}
 
-% fixed-height, centered cell
+% fixed-height, centered cell -- constrains BOTH height and width (with
+% keepaspectratio picking whichever is tighter), so a gt/pred image whose
+% aspect ratio isn't perfectly square (matplotlib's bbox_inches='tight' can
+% crop asymmetrically per image) can never overflow the column width the
+% way a height-only constraint would allow.
 \newcommand{\qualCellImg}[2]{%
   \begin{minipage}[c][\qualRowH][c]{\qualColW}\centering
-    \includegraphics[height=\dimexpr #2\qualRowH\relax, keepaspectratio]{#1}%
+    \includegraphics[height=\dimexpr #2\qualRowH\relax, width=\qualColW, keepaspectratio]{#1}%
   \end{minipage}%
 }
 
 % column helpers
+% og.jpg is the raw photo with zero internal margin, filling its full frame,
+% while gt/pred.png are rendered on a fixed-figsize matplotlib canvas with a
+% genuine 5% margin baked in on every side (axes occupy [0.05,0.05,0.9,0.9]
+% of the figure, verified against the actual saved PNGs), so the visible
+% photo content there fills only 90% of the nominal image height/width.
+% Displaying og at 0.90 (down from 0.92) instead of the full 1.00 matches
+% that same effective 90% visible-content scale, so all three columns show
+% the coral photo at a consistent apparent size despite gt/pred's margin.
 \newcommand{\qualOGcell}[1]{%
-  \qualCellImg{fig9#1_og\qualOGext}{0.92}}
+  \qualCellImg{fig9#1_og\qualOGext}{0.90}}
 \newcommand{\qualGTcell}[1]{%
   \qualCellImg{fig9#1_gt\qualGText}{1.00}}
 \newcommand{\qualPREcell}[1]{%
@@ -52,7 +64,10 @@
     \bottomrule
   \end{tabular}%
 }
-\caption{Qualitative examples from the held-out test set, comparing raw Yellowfin images, expert annotations, and machine vision pipeline predictions. Colors are arbitrary, but identical colors denote identical classes; lighter shades within a genus indicate bleached status. The SAM2-based segmentation captures colony boundaries at a precision difficult even for human annotators.}
+
+\revadd{\includegraphics[width=0.9\linewidth]{fig9_legend.png}}
+
+\caption{Qualitative examples from the held-out test set, comparing raw Yellowfin images, expert annotations, and machine vision pipeline predictions. Lighter shades within a genus indicate bleached status; non-coral masks are rejected prior to final output and are not shown.}
 \label{fig:qual-results}
 \end{figure}
 

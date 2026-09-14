@@ -585,7 +585,12 @@ class SAM2Segmenter:
 
         ax.imshow(img)
 
-    def show_masks(self, masks, color_map=None, labels=None, return_image=False, show=True, save_path=None):
+    def show_masks(self, masks, color_map=None, labels=None, return_image=False, show=True, save_path=None, show_labels=True):
+        """show_labels=False colors each mask via color_map/labels as usual
+        but suppresses the per-mask text annotation -- for figures that
+        instead carry a single shared legend elsewhere (e.g.
+        scripts/render_examples.py), where per-mask text would be redundant
+        clutter on top of the legend."""
 
         if labels is not None:
             assert len(masks) == len(labels), "Each mask must have a corresponding label"
@@ -607,12 +612,19 @@ class SAM2Segmenter:
         if labels is not None:
             for mask, label in zip(masks, labels):
                 color = color_map[label]
-                self._show_single_mask(ax, mask['segmentation'], color=color, label=label)
+                self._show_single_mask(ax, mask['segmentation'], color=color, label=(label if show_labels else None))
         else:
             self.show_anns(masks)
 
         if save_path:
-            fig.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=0)
+            # bbox_inches='tight' crops to the rendered content's extent, which
+            # includes per-mask text labels (show_labels=True) -- a label near
+            # the image edge can push its text bbox outside the 1024x1024
+            # image, and how far varies per image/mask layout. That made
+            # saved figures inconsistently non-square across examples. Saving
+            # the fixed figsize=(10, 10) canvas as-is guarantees every output
+            # is exactly square, matching the underlying image's aspect ratio.
+            fig.savefig(save_path, dpi=300)
             plt.close(fig)
 
         if show:

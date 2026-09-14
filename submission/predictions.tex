@@ -1,0 +1,53 @@
+\begingroup
+
+\newcommand{\qualOGext}{.jpg}
+\newcommand{\qualGText}{.png}
+\newcommand{\qualPREext}{.png}
+
+\newlength{\qualColW}   \setlength{\qualColW}{0.22\textwidth}
+\newlength{\qualRowH}   \setlength{\qualRowH}{0.165\textheight}
+
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{0.5}
+\newcommand{\qualRowSpace}{0.1em}
+
+\newcommand{\qualCellImg}[2]{%
+  \begin{minipage}[c][\qualRowH][c]{\qualColW}\centering
+    \includegraphics[height=\dimexpr #2\qualRowH\relax, width=\qualColW, keepaspectratio]{#1}%
+  \end{minipage}%
+}
+
+\newcommand{\qualOGcell}[1]{%
+  \qualCellImg{fig9#1_og\qualOGext}{0.90}}
+\newcommand{\qualGTcell}[1]{%
+  \qualCellImg{fig9#1_gt\qualGText}{1.00}}
+\newcommand{\qualPREcell}[1]{%
+  \qualCellImg{fig9#1_pred\qualPREext}{1.00}}
+
+\newcommand{\qualExampleRow}[1]{%
+  \qualOGcell{#1} & \qualGTcell{#1} & \qualPREcell{#1} \\
+  \addlinespace[\qualRowSpace]
+}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{!}{0.45\textheight}{%
+  \begin{tabular}{ccc}
+    \toprule
+    \textbf{\small Yellowfin Image} & \textbf{\small Ground Truth} & \textbf{\small Prediction} \\
+    \midrule
+    \qualExampleRow{a}
+    \qualExampleRow{b}
+    \qualExampleRow{c}
+    \qualExampleRow{d}
+    \bottomrule
+  \end{tabular}%
+}
+
+\includegraphics[width=0.9\linewidth]{fig9_legend.png}
+
+\caption{Qualitative examples from the held-out test set, comparing raw Yellowfin images, expert annotations, and machine vision pipeline predictions. Lighter shades within a genus indicate bleached status; non-coral masks are rejected prior to final output and are not shown.}
+\label{fig:qual-results}
+\end{figure}
+
+\endgroup

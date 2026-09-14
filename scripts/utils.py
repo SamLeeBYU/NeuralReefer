@@ -194,6 +194,12 @@ def compute_coco_taxonomy_metrics(pred_coco, gt_coco, taxonomy="lcc", remap_path
                           one row per image.
             "genus"    -- coral cover per genus (bleached + healthy
                           combined), one row per (image, genus).
+            "genus_bleach" -- coral cover per (genus, bleach status) pair,
+                          one row per (image, genus, bleach status), labeled
+                          "<genus>:bleached"/"<genus>:healthy" -- the finer
+                          cross-tabulation "genus" collapses, needed for a
+                          bias decomposition by both genus AND bleach status
+                          (e.g. the paper's Table 5).
         remap_path: path to the raw->genus remap json (default config.REMAP_PATH).
         classes_file: path to the canonical class dictionary (default
             config.CLASSES_FILE) used to derive the fixed genus list for
@@ -215,8 +221,8 @@ def compute_coco_taxonomy_metrics(pred_coco, gt_coco, taxonomy="lcc", remap_path
     Images present in only one of pred/gt are skipped (with a printed
     warning) rather than scored against an empty mask.
     """
-    if taxonomy not in ("lcc", "bleached", "genus"):
-        raise ValueError(f"taxonomy must be one of 'lcc', 'bleached', 'genus' -- got {taxonomy!r}")
+    if taxonomy not in ("lcc", "bleached", "genus", "genus_bleach"):
+        raise ValueError(f"taxonomy must be one of 'lcc', 'bleached', 'genus', 'genus_bleach' -- got {taxonomy!r}")
 
     pred = _load_coco(pred_coco)
     gt = _load_coco(gt_coco)
@@ -233,14 +239,20 @@ def compute_coco_taxonomy_metrics(pred_coco, gt_coco, taxonomy="lcc", remap_path
         print(f"WARNING: {len(missing)} image(s) present in only one of pred/gt COCO structures "
               f"and will be skipped (e.g. {missing[:3]})")
 
-    if taxonomy == "genus":
+    if taxonomy in ("genus", "genus_bleach"):
         if genus_names is None:
             with open(classes_file, "r") as f:
                 classes = json.load(f)
             genus_names = sorted(set(
                 k.split(":")[0] for k in classes if k.endswith(":bleached") or k.endswith(":healthy")
             ))
-        predicates = {genus: (lambda label, g=genus: label.startswith(f"{g}:")) for genus in genus_names}
+        if taxonomy == "genus":
+            predicates = {genus: (lambda label, g=genus: label.startswith(f"{g}:")) for genus in genus_names}
+        else:
+            predicates = {}
+            for genus in genus_names:
+                predicates[f"{genus}:bleached"] = (lambda label, g=genus: label == f"{g}:bleached")
+                predicates[f"{genus}:healthy"] = (lambda label, g=genus: label == f"{g}:healthy")
     elif taxonomy == "lcc":
         predicates = {"lcc": lambda label: label != "noncoral"}
     else:

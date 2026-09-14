@@ -3,6 +3,7 @@ scripts/config.py
 # Miscellaneous
 scripts/ensemble_aggregation_sim.R
 scripts/verify_split_integrity.py
+Rplots.pdf
 
 ### Large Files ###
 
@@ -251,3 +252,7 @@ $RECYCLE.BIN/
 #R
 .Rhistory
 .RData
+
+# Large paper PDFs
+paper/main.pdf
+submission/main.pdf

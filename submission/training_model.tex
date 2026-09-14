@@ -1,0 +1,215 @@
+\begin{tikzpicture}[node distance=2cm and 1.5cm]
+
+\node (data) [align=center] {
+    \begin{tikzpicture}[scale=2, baseline=-1.5ex]
+        \fill[gray!30] (0,0) ellipse (0.5cm and 0.15cm);
+        \fill[gray!30] (-0.5,0) -- (-0.5,-1.0) arc (180:360:0.5cm and 0.15cm) -- (0.5,0);
+        \fill[gray!50] (0,-1.0) ellipse (0.5cm and 0.15cm);
+        
+        \foreach \y in {0,-0.25,-0.5,-0.75} {
+            \draw[gray!60] (-0.5,\y) arc (180:360:0.5cm and 0.15cm);
+        }
+        
+        \draw[gray!60] (0,0) ellipse (0.5cm and 0.15cm);
+        \draw[gray!60] (-0.5,0) -- (-0.5,-1.0);
+        \draw[gray!60] (0.5,0) -- (0.5,-1.0);
+        
+        \node[above, yshift=2mm] at (0,0.2) {Annotated Yellowfin Images\\\small(552 Images)};
+    \end{tikzpicture}
+};
+
+\def\barw{1.2cm}
+\def\Htot{5cm}
+
+\node[
+  minimum width=\barw,
+  minimum height=0.8*\Htot,
+  fill=teal!30,
+  rounded corners=2pt,
+  draw=none
+] (trainbar) [right=1.5cm of data, yshift=3cm] {\textbf{Train}};
+
+\node[align=center, below=1mm of trainbar]
+  {\small(441 Images)};
+
+\node[
+  minimum width=\barw,
+  minimum height=0.2*\Htot,
+  fill=red!30,
+  rounded corners=2pt,
+  draw=none
+] (testbar) [right=1.5cm of data, yshift=-1cm] {\textbf{Test}};
+\node[align=center, below=1mm of testbar]
+  {\small(111 Images)};
+
+\draw[arrow]
+  ($(data.east)+(-1cm,0)$) .. controls +(0.4,0.6) and +(-0.5,-0.1) .. (trainbar.west);
+\draw[arrow]
+  ($(data.east)+(-1cm,0)$) .. controls +(0.4,-0.4) and +(-0.5,0.0) .. (testbar.west);
+
+\coordinate (maskx) at ($(trainbar.east)+(8.5cm,0)$);
+
+\draw[-, line width=0.9pt]
+  (trainbar.east) -- ($(maskx) + (-0.85cm,0cm)$);
+
+\node[redbox] (sam2tuning) [right=0.75cm of trainbar] 
+  {Segmentation\\Hyperparameter\\Tuning};
+
+\node[bluecircle] (sam2) [right=0.5cm of sam2tuning] 
+  {Segmentation\\Model};
+
+\def\maskW{1.2cm}
+\def\maskH{3.5cm}
+
+\node[
+  rounded corners=2pt, fill=magenta!50,
+  minimum width=\maskW, minimum height=0.70*\maskH,
+  anchor=west,
+  align=center
+] (masktrain) at ($(maskx)+(0,2cm)$) {};
+\node[align=center, below=3mm of masktrain]
+  {\small \textbf{Train Masks}\\\scriptsize($41,101$ Masks)};
+
+\node[
+  rounded corners=2pt, fill=orange!50,
+  minimum width=\maskW, minimum height=0.30*\maskH,
+  anchor=west
+] (masktest) at ($(maskx)+(0,-2cm)$) {};
+\node[align=center, below=3mm of masktest]
+  {\small \textbf{Held-out Masks}\\\scriptsize($17,615$ Masks)};
+
+\node[
+  rounded corners=2pt, fill=green!50,
+  minimum width=\maskW, minimum height=0.9*0.30*\maskH,
+  anchor=west
+] (ensembletrain) at ($(maskx)+(2.5cm,-1cm)$) {};
+\node[align=center, below=3mm of ensembletrain]
+  {\small \textbf{Ensemble Train}\\\scriptsize($15,853$ Masks)};
+
+\node[
+  rounded corners=2pt, fill=yellow!50,
+  minimum width=\maskW, minimum height=0.1*0.30*\maskH,
+  anchor=west
+] (ensembletest) at ($(maskx)+(2.5cm,-3.5cm)$) {};
+\node[align=center, below=3mm of ensembletest]
+  {\small \textbf{Validation Set}\\\scriptsize($1,762$ Masks)};
+
+\draw[arrow]
+  ($(masktest.east)$) .. controls +(0.4,0.6) and +(-0.5,-0.1) .. (ensembletrain.west);
+\draw[arrow]
+  ($(masktest.east)$) .. controls +(0.4,-0.4) and +(-0.5,0.0) .. (ensembletest.west);
+
+\path[arrow]
+  (trainbar.east) -- (sam2.center) -- ($(sam2.east)+(0.35,0)$) coordinate (splitA);
+
+\draw[arrow]
+  (splitA) .. controls +(0.60,0.20) and +(-0.50,-0.10) .. (masktrain.west);
+
+\draw[arrow]
+  (splitA) .. controls +(0.60,-0.20) and +(-0.50,0.10) .. (masktest.west);
+
+\node[smallredbox, right=1cm of masktrain] (augment) {$\phi(\cdot)$};
+\node[align=center, below=3mm of augment]
+  {\small Bootstrapping\\\small + Augmentation};
+
+\foreach \dy in {-24pt,-12pt,0pt,12pt,24pt} {
+  \draw[arrow]
+    ($(masktrain.east)+(0,\dy)$) -- ($(augment.west)+(0, \dy/12)$);
+}
+
+\foreach \i in {1,...,5} {
+  \node[bluecircle] (model\i)
+    at ($(augment.east)+(1.75cm, {(\i-3)*1.2cm})$)
+    {};
+  \draw[arrow]
+    ($(augment.east)+(0,0)$) --
+    (model\i.west);
+}
+
+\node[align=center, above=1mm of model5]
+  {\small$M$ CNN Submodule\\\small Training};
+
+\node[smallredbox, right=1cm of model3] (cnneval) {$\hat{f}^{(m)}(\cdot)$};
+\node[align=center, above=3mm of cnneval]
+  {\small Submodel\\\small Evaluation};
+
+\foreach \i in {1,...,5} {
+  \draw[arrow]
+    ($(model\i.east)+(0,0)$) --
+    ($(cnneval.west) + (0, \i/15-3/15)$);
+}
+
+\draw[arrow]
+  (ensembletrain.east) .. controls +(3,-0.5) and +(0,-0.8) .. (cnneval.south);
+
+\node (matBack) [align=center, inner sep=0pt, right=2cm of cnneval.east] {%
+  {\color{gray!60}$\left[
+  \begin{tikzpicture}[scale=0.5, baseline=0ex]
+    \def\sep{0.9cm}\def\radius{1.2pt}
+    \foreach \i in {0,1,2}{
+      \foreach \j in {0,1,2}{
+        \fill (\i*\sep,\j*\sep-20) circle (\radius);
+      }
+    }
+  \end{tikzpicture}
+  \right]$}%
+};
+
+\node (matFront) [inner sep=0pt] at ($(matBack)+(-0.35cm,-0.25cm)$) {%
+  $\left[
+  \begin{tikzpicture}[scale=0.5, baseline=0ex]
+    \def\sep{0.9cm}\def\radius{1.2pt}
+    \foreach \i in {0,1,2}{
+      \foreach \j in {0,1,2}{
+        \fill (\i*\sep,\j*\sep-20) circle (\radius);
+      }
+    }
+  \end{tikzpicture}
+  \right]$%
+};
+\node[align=center, above=3mm of matFront]
+  {\small Ensemble\\\small Probabilities};
+\node[align=center, below=1mm of matFront]
+  {\small $(N\times M \times K)$};
+\draw[arrow]
+  (cnneval.east) .. controls +(0.5,0.5) and +(0,0) .. (matFront.west);
+
+\node[bluecircle] (ensemblemodel) [below=2.5cm of matFront] 
+  {\small Ensemble\\\small Model};
+
+\draw[arrow]
+  ($(matFront.south) + (0, -0.6cm)$) -- (ensemblemodel.north);
+
+\node[smallredbox] (ensemblemodeltrain) [below=1cm of matFront] 
+  {\small Ensemble\\\small Training};
+
+\node[bluecircle] (nf) [below=0.5cm of ensemblemodel] 
+{\small\textbf{Semantic}\\\small\textbf{Segmentation}};
+
+\draw[arrow]
+  (ensemblemodel.south) -- (nf.north);
+
+\draw[arrow, bend right=50] (sam2.south) to (nf.west);
+
+\coordinate (ensemblejoin) at ($(ensemblemodel.west)+(-2.5cm,0.5cm)$);
+\node[graybox] (metrics) at ($(ensemblejoin) + (0, -1cm)$) {Out-of-Sample\\Mask Metrics};
+
+\draw[-, thick] (ensemblemodel.west) to[out=180, in=60,  looseness=1.05] (ensemblejoin);
+\draw[-, thick] (ensembletest.east) to[out=60,   in=60, looseness=1.05] (ensemblejoin);
+
+\draw[arrow, thick, bend right=20] (ensemblejoin) to (metrics.north);
+
+\coordinate (testjoin) at ($(nf.south) + (0cm,-1cm)$);
+
+\draw[-, thick, bend right=15]
+    (testbar.east) to (testjoin);
+
+\node[graybox] (testmasks) at ($(testjoin) + (0cm, -1cm)$) {Out-of-Sample\\LCC Metrics};
+
+\draw[arrow, thick, bend right=15]
+    (testjoin) to (testmasks.north);
+
+\draw[-, thick, bend right=25]
+  (testjoin) to  (nf.south);
+
+\end{tikzpicture}
