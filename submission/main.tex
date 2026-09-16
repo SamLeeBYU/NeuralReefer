@@ -127,29 +127,21 @@ Coral reefs \sep Machine vision \sep Ecological monitoring \sep Semantic segment
 \end{frontmatter}
 
 \sbox{\perftablebox}{%
-\begin{tabular}{ll@{\hspace{4pt}}r@{\hspace{4pt}}r}
+\begin{tabular}{lrr rr rr rr}
 \toprule
-\textbf{Parameter} & \textbf{Description} & \textbf{Large} & \textbf{Small} \\
+\textbf{Class} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
-\multicolumn{4}{l}{\textit{Segmentation Parameters}} \\
-\texttt{points\_per\_side} & Grid resolution for prompt points & 4 & 21 \\
-\texttt{points\_per\_batch} & Prompt points per batch & 36 & 64 \\
-\texttt{pred\_iou\_thresh} & Minimum predicted IoU for mask retention & 0.3301 & 0.3275 \\
-\texttt{stability\_score\_thresh} & Threshold on SAM2 stability score & 0.1785 & 0.4271 \\
-\texttt{stability\_score\_offset} & Offset added to stability score & 0.9626 & 0.9404 \\
-\texttt{crop\_n\_layers} & Number of pyramid crop layers & 0 & 0 \\
-\texttt{box\_nms\_thresh} & IoU threshold for NMS suppression & 0.4803 & 0.4677 \\
-\texttt{crop\_n\_points\_downscale\_factor} & Crop grid downscale factor & 1 & 1 \\
-\texttt{min\_mask\_region\_area} & Minimum mask area (pixels) & 10{,}000 & 400 \\
+Live Coral Cover (all coral) & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
+Bleached (any genus)         & 0.350 & (0.033) & 0.427 & (0.034) & 0.635 & (0.037) & 0.395 & (0.037) \\
 \midrule
-\multicolumn{2}{l}{\textit{Postprocessing and Augmentation Parameters}} & & \\
-\texttt{overlap} & Max allowed mask overlap during merging & 0.0280 & \\
-\texttt{solidarity} & Inter-mask consistency weighting & 0.7148 & \\
-\texttt{clipLimit} & CLAHE contrast enhancement limit & 9 & \\
-\texttt{tileGridSize} & Grid size for CLAHE transformation & 8 & \\
-\texttt{redBoost} & Red channel intensity multiplier & 1.2718 & \\
-\texttt{whiteBalance} & Apply white balance correction & \texttt{True} & \\
-\texttt{gamma} & Gamma correction for normalization & 0.7780 & \\
+Branching Acropora & 0.728 & (0.038) & 0.752 & (0.038) & 0.752 & (0.062) & 0.501 & (0.063) \\
+Finger Acropora    & 0.619 & (0.031) & 0.702 & (0.030) & 0.794 & (0.024) & 0.679 & (0.034) \\
+Finger Porites     & 0.674 & (0.041) & 0.698 & (0.040) & 0.511 & (0.065) & 0.475 & (0.063) \\
+Knob Porites       & 0.720 & (0.037) & 0.754 & (0.035) & 0.623 & (0.060) & 0.500 & (0.058) \\
+Mounding           & 0.452 & (0.040) & 0.501 & (0.040) & 0.484 & (0.051) & 0.320 & (0.040) \\
+Oddball            & 0.473 & (0.047) & 0.475 & (0.047) & 0.050 & (0.034) & 0.057 & (0.035) \\
+Pocillopora        & 0.673 & (0.040) & 0.702 & (0.039) & 0.564 & (0.063) & 0.542 & (0.062) \\
+Table Acropora     & 0.622 & (0.043) & 0.642 & (0.043) & 0.360 & (0.064) & 0.431 & (0.070) \\
 \bottomrule
 \end{tabular}%
 }
@@ -315,7 +307,33 @@ To tailor the SAM2-based segmentation module for detecting coral colonies across
 \centering
 \caption{Tuned parameters for SAM2 segmentation and preprocessing augmentations. Segmentation parameters are tuned separately for large and small object detection, while postprocessing and augmentation parameters are shared.}
 \label{tab:sam2-tuned-params}
-\resizebox{\linewidth}{!}{\usebox{\perftablebox}}
+\resizebox{\linewidth}{!}{%
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} ll@{\hspace{4pt}}r@{\hspace{4pt}}r}
+\toprule
+\textbf{Parameter} & \textbf{Description} & \textbf{Large} & \textbf{Small} \\
+\midrule
+\multicolumn{4}{l}{\textit{Segmentation Parameters}} \\
+\texttt{points\_per\_side} & Grid resolution for prompt points & 4 & 21 \\
+\texttt{points\_per\_batch} & Prompt points per batch & 36 & 64 \\
+\texttt{pred\_iou\_thresh} & Minimum predicted IoU for mask retention & 0.3301 & 0.3275 \\
+\texttt{stability\_score\_thresh} & Threshold on SAM2 stability score & 0.1785 & 0.4271 \\
+\texttt{stability\_score\_offset} & Offset added to stability score & 0.9626 & 0.9404 \\
+\texttt{crop\_n\_layers} & Number of pyramid crop layers & 0 & 0 \\
+\texttt{box\_nms\_thresh} & IoU threshold for NMS suppression & 0.4803 & 0.4677 \\
+\texttt{crop\_n\_points\_downscale\_factor} & Crop grid downscale factor & 1 & 1 \\
+\texttt{min\_mask\_region\_area} & Minimum mask area (pixels) & 10{,}000 & 400 \\
+\midrule
+\multicolumn{2}{l}{\textit{Postprocessing and Augmentation Parameters}} & & \\
+\texttt{overlap} & Max allowed mask overlap during merging & 0.0280 & \\
+\texttt{solidarity} & Inter-mask consistency weighting & 0.7148 & \\
+\texttt{clipLimit} & CLAHE contrast enhancement limit & 9 & \\
+\texttt{tileGridSize} & Grid size for CLAHE transformation & 8 & \\
+\texttt{redBoost} & Red channel intensity multiplier & 1.2718 & \\
+\texttt{whiteBalance} & Apply white balance correction & \texttt{True} & \\
+\texttt{gamma} & Gamma correction for normalization & 0.7780 & \\
+\bottomrule
+\end{tabular*}%
+}
 \begin{tablenotes}
 \item \emph{Notes: ``Large'' and ``Small'' denote the two SAM2 mask-proposal configurations tuned separately for large and small coral structures (Section~\ref{sec:sam2}), not distinct model sizes. Postprocessing and augmentation parameters are shared between the two configurations and are reported once, under the Large column.}
 \end{tablenotes}
@@ -323,7 +341,7 @@ To tailor the SAM2-based segmentation module for detecting coral colonies across
 
  Formally, $\Theta_\text{SAM}$ denotes the SAM2 hyperparameter space, and $\Theta_\text{aug}$ denote the space of augmentation parameters used during preprocessing of the image used for segmentation. The full parameter space is thus defined as $\Theta = \Theta_\text{SAM}^2 \times \Theta_\text{aug}$, where $\Theta_\text{SAM}^2$ indicates the parameter spaces for both the large mask proposal and small mask proposal generation methods, respectively. Each configuration $\theta \in \Theta$ is a tuple consisting of both model-level and image-level parameters. We give a brief description of each tunable parameter in Table~\ref{tab:sam2-tuned-params}.
 
-To evaluate candidate configurations $\theta \in \Theta$, we construct a representative validation set $\mathcal{I}$ as follows. We define the constant $k$ to indicate the number of total images sampled with stratified Monte Carlo sampling for each proposed $\theta$. Each image $i \in \mathcal{I}$ is assigned to a stratum according to its number of ground truth coral annotations, and sample counts per stratum are allocated proportionally to stratum size to ensure broad coverage across annotation densities (and thus, coverage across the distribution of coral cover). For our purposes, we used the empirical quintiles of the number of ground truth annotations to define the boundaries of each stratum.
+To evaluate candidate configurations $\theta \in \Theta$, we construct a representative validation set $\mathcal{I}$, consisting of a fixed number of images sampled with stratified Monte Carlo sampling for each proposed $\theta$, as follows. Each image $i \in \mathcal{I}$ is assigned to a stratum according to its number of ground truth coral annotations, and sample counts per stratum are allocated proportionally to stratum size to ensure broad coverage across annotation densities (and thus, coverage across the distribution of coral cover). For our purposes, we used the empirical quintiles of the number of ground truth annotations to define the boundaries of each stratum.
 For a given configuration $\theta$, we compute the predicted set of masks for each image $i$, and evaluate performance with two image-level metrics defined at the pixel level: $\text{Accuracy}(\theta)$, the average proportion of correctly matched predicted pixels as either coral or non-coral, and $\text{Recall}(\theta)$, the fraction of ground truth live coral mask pixels that are covered by a predicted coral mask.
 
 To prioritize sensitivity in mask discovery while retaining precision, we define a convex score function:
@@ -333,7 +351,7 @@ To prioritize sensitivity in mask discovery while retaining precision, we define
 \end{equation}
 and use this as the objective for optimization.
 
-Optimization is performed using \texttt{forest\_minimize} from \texttt{scikit-optimize}, which builds a nonparametric surrogate model using an Extra Trees regressor to approximate the score surface over $\Theta$. At each iteration, a new configuration $\theta$ is proposed and evaluated on $\mathcal{I}$ using the scoring function above. The best configuration is selected as $\theta^* = \arg\max_{\theta \in \Theta} \text{Score}(\theta),$ with $\theta^* = (\theta^*_\text{large}, \theta^*_\text{small}, \theta^*_\text{aug})$ corresponding to the tuned large-object and small-object SAM2 parameters, as well as image-level augmentation settings. We fix $k = 30$ and run $n = 100$ optimization calls for all experiments reported in this work, and choose $\lambda=3$ in Equation \ref{eq:score} to emphasize recall. This procedure yields high-recall mask proposals across coral size scales, and directly informs the subsequent classification module.
+Optimization is performed using \texttt{forest\_minimize} from \texttt{scikit-optimize}, which builds a nonparametric surrogate model using an Extra Trees regressor to approximate the score surface over $\Theta$. At each iteration, a new configuration $\theta$ is proposed and evaluated on $\mathcal{I}$ using the scoring function above. The best configuration is selected as $\theta^* = \arg\max_{\theta \in \Theta} \text{Score}(\theta),$ with $\theta^* = (\theta^*_\text{large}, \theta^*_\text{small}, \theta^*_\text{aug})$ corresponding to the tuned large-object and small-object SAM2 parameters, as well as image-level augmentation settings. We fix $|\mathcal{I}| = 30$ and run 100 optimization calls for all experiments reported in this work, and choose $\lambda=3$ in Equation \ref{eq:score} to emphasize recall. This procedure yields high-recall mask proposals across coral size scales, and directly informs the subsequent classification module.
 
 \subsubsection{Mask Consolidation}
 
@@ -418,7 +436,7 @@ In summary, no images, masks, augmentations, or hyperparameter decisions from th
 
 To aggregate the predictions of the $M$ independently trained CNN classifiers, we construct an ensemble model that aggregates the instance-level probability vectors through a learned weighting scheme, which we establish here as a parsimonious, yet flexible interpretation of model stacking \citep{wolpert1992stacked, dietterich2000ensemble}. Here we discuss the technical details of our ensemble aggregation and present formally the implications of our results.
 
-As defined earlier, we let $\{(x_i, y_i)\}_{i=1}^N$ be a (disjoint, held-out) dataset where $y_i$ $\in \{1, \ldots, K\}$ denotes the class label for feature vector $x_i\in\mathbb{R}^{C\times H\times W}$. Consider an ensemble of $M$ pre-trained models, where the $m$-th model produces a predicted probability vector $\hat{\bm{p}}^{(m)}_i \in \Delta^{K-1}$ for input $x_i$. To improve the ensemble's flexibility and performance, we introduce two sets of learnable parameters. The first consists of model weights $\bm{\alpha} = (\alpha_1, \dots, \alpha_M)^\intercal$, which govern the overall contribution of each model to the ensemble. The second consists of class-specific weight matrix $\bm{W} \in \mathbb{R}^{M\times K}$ for each model, and, for notation's sake, each row vector in this weight matrix is denoted as $\bm{w}_m \in \mathbb{R}^K$. This design enables the ensemble to adaptively capture strengths of individual models: if, due to stochastic variation in training, a particular model learns features of a specific class more effectively, the framework can assign higher weight to that model's predictions for that class. In this way, the ensemble leverages class-specific expertise from individual models while maintaining overall robustness.
+As defined earlier, we let $\{(x_i, y_i)\}_{i=1}^N$ be a (disjoint, held-out; here $N=15{,}853$, distinct from and smaller than the $N=58{,}716$ mask crops used to train the CNN submodels themselves, Section~\ref{sec:cnn}) dataset where $y_i$ $\in \{1, \ldots, K\}$ denotes the class label for feature vector $x_i\in\mathbb{R}^{C\times H\times W}$. Consider an ensemble of $M$ pre-trained models, where the $m$-th model produces a predicted probability vector $\hat{\bm{p}}^{(m)}_i \in \Delta^{K-1}$ for input $x_i$. To improve the ensemble's flexibility and performance, we introduce two sets of learnable parameters. The first consists of model weights $\bm{\alpha} = (\alpha_1, \dots, \alpha_M)^\intercal$, which govern the overall contribution of each model to the ensemble. The second consists of class-specific weight matrix $\bm{W} \in \mathbb{R}^{M\times K}$ for each model, and, for notation's sake, each row vector in this weight matrix is denoted as $\bm{w}_m \in \mathbb{R}^K$. This design enables the ensemble to adaptively capture strengths of individual models: if, due to stochastic variation in training, a particular model learns features of a specific class more effectively, the framework can assign higher weight to that model's predictions for that class. In this way, the ensemble leverages class-specific expertise from individual models while maintaining overall robustness.
 
 The final ensemble prediction $\hat{\bm{p}}_i$ is computed as a weighted aggregation of each submodel's normalized outputs. Formally,
 \begin{align}
@@ -517,7 +535,7 @@ To quantify the severity of bleaching, we compute the proportion of the area in 
 \section{Results}
 \label{sec:results}
 
-We evaluate the proposed machine vision pipeline on the held-out test set of 111 Yellowfin top-down images from Majuro that were excluded from all stages of model development. Unless otherwise specified, all statistics are reported on the test set, with training panels provided for context. Inference ran on a single NVIDIA GeForce RTX~4080 GPU and required roughly five seconds per image on average, with longer runtimes in scenes containing higher live coral cover due to a larger number of candidate masks.
+We evaluate the proposed machine vision pipeline on the held-out test set of 111 Yellowfin top-down images from Majuro that were excluded from all stages of model development. Unless otherwise specified, all statistics are reported on the test set, with training panels provided for context. The pipeline was trained on a single NVIDIA GeForce RTX~4080 GPU, and typical GPU inference requires roughly five seconds per image on average, with longer runtimes in scenes containing higher live coral cover due to a larger number of candidate masks. For logistical reasons, however, the statistics reported throughout this paper were generated by running the trained pipeline on CPU.\footnote{The CPU-based results reported throughout this paper are exactly reproducible from run to run (see \href{https://github.com/SamLeeBYU/NeuralReefer\#-reproducing-the-papers-results}{https://github.com/SamLeeBYU/NeuralReefer\#-reproducing-the-papers-results}). We separately verified that running the same trained pipeline on GPU is also reproducible run to run, but GPU-specific floating-point and kernel-selection non-determinism yields slightly different results from the CPU-derived statistics reported here: on the 111-image held-out test set, GPU inference gives a live coral cover IoU of 0.6678 and Dice of 0.7763, compared to the CPU-derived IoU of 0.674 and Dice of 0.781 reported in Section~\ref{sec:iou_dice}.}
 
 We begin with qualitative, end-to-end predictions (Figure~\ref{fig:qual-results}), showing the progression from raw Yellowfin images to expert annotations and model outputs. The examples highlight the proposed pipeline's ability to accurately recover colony boundaries and correctly classify by bleaching status and morpho-taxonomic class across diverse scenes. Colors are arbitrary for visualization, though identical colors indicate identical classes, and lighter shades within a class denote bleached status.
 
@@ -617,26 +635,26 @@ Coral-cover accuracy and the bias decomposition above summarize how well aggrega
 \caption{Pixel-level IoU, Dice, precision, and recall by taxonomic class, macro-averaged over the 111-image held-out test set.}
 \label{tab:iou-dice-taxonomy}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrrrr}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrr rr rr rr}
 \toprule
-\textbf{Class} & \textbf{IoU} & \textbf{Dice} & \textbf{Precision} & \textbf{Recall} \\
+\textbf{Class} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
-Live Coral Cover (all coral) & 0.674 & 0.781 & 0.848 & 0.780 \\
-Bleached (any genus)         & 0.350 & 0.427 & 0.635 & 0.395 \\
+Live Coral Cover (all coral) & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
+Bleached (any genus)         & 0.350 & (0.033) & 0.427 & (0.034) & 0.635 & (0.037) & 0.395 & (0.037) \\
 \midrule
-Branching Acropora & 0.728 & 0.752 & 0.752 & 0.501 \\
-Finger Acropora    & 0.619 & 0.702 & 0.794 & 0.679 \\
-Finger Porites     & 0.674 & 0.698 & 0.511 & 0.475 \\
-Knob Porites       & 0.720 & 0.754 & 0.623 & 0.500 \\
-Mounding           & 0.452 & 0.501 & 0.484 & 0.320 \\
-Oddball            & 0.473 & 0.475 & 0.050 & 0.057 \\
-Pocillopora        & 0.673 & 0.702 & 0.564 & 0.542 \\
-Table Acropora     & 0.622 & 0.642 & 0.360 & 0.431 \\
+Branching Acropora & 0.728 & (0.038) & 0.752 & (0.038) & 0.752 & (0.062) & 0.501 & (0.063) \\
+Finger Acropora    & 0.619 & (0.031) & 0.702 & (0.030) & 0.794 & (0.024) & 0.679 & (0.034) \\
+Finger Porites     & 0.674 & (0.041) & 0.698 & (0.040) & 0.511 & (0.065) & 0.475 & (0.063) \\
+Knob Porites       & 0.720 & (0.037) & 0.754 & (0.035) & 0.623 & (0.060) & 0.500 & (0.058) \\
+Mounding           & 0.452 & (0.040) & 0.501 & (0.040) & 0.484 & (0.051) & 0.320 & (0.040) \\
+Oddball            & 0.473 & (0.047) & 0.475 & (0.047) & 0.050 & (0.034) & 0.057 & (0.035) \\
+Pocillopora        & 0.673 & (0.040) & 0.702 & (0.039) & 0.564 & (0.063) & 0.542 & (0.062) \\
+Table Acropora     & 0.622 & (0.043) & 0.642 & (0.043) & 0.360 & (0.064) & 0.431 & (0.070) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} IoU and Dice are computed per image at the pixel level (union of masks of the given class vs.\ everything else) and averaged across the 111 test images. Genus-level precision/recall are lower than the coral-vs-non-coral (``Live Coral Cover'') row because they require the correct genus label, as opposed to merely correct coral/non-coral discrimination; the Oddball class's especially low precision/recall reflects its heterogeneous composition and low training frequency (Table~\ref{tab:mask-cover}).
+\item \emph{Notes:} IoU and Dice are computed per image at the pixel level (union of masks of the given class vs.\ everything else) and averaged across the 111 test images; standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images. Genus-level precision/recall are lower than the coral-vs-non-coral (``Live Coral Cover'') row because they require the correct genus label, as opposed to merely correct coral/non-coral discrimination; the Oddball class's especially low precision/recall reflects its heterogeneous composition and low training frequency (Table~\ref{tab:mask-cover}).
 \end{tablenotes}
 \end{table}
 
@@ -651,20 +669,24 @@ To contextualize these numbers against an external baseline, Table~\ref{tab:cora
 \caption{Live coral cover (coral vs.\ non-coral) segmentation quality: NeuralReefer vs.\ CoralSCOP.}
 \label{tab:coralscop-comparison}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lcccccccc}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrr rr rr rr}
 \toprule
- & \multicolumn{4}{c}{\textbf{In-Sample} ($n=441$)} & \multicolumn{4}{c}{\textbf{Out-of-Sample} ($n=111$)} \\
-\cmidrule(lr){2-5} \cmidrule(lr){6-9}
-\textbf{Method} & IoU & Dice & Precision & Recall & IoU & Dice & Precision & Recall \\
+\textbf{Method} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
-NeuralReefer & 0.714 & 0.813 & 0.882 & 0.792 & 0.674 & 0.781 & 0.848 & 0.780 \\
-Single CNN   & 0.695 & 0.801 & 0.851 & 0.783 & 0.641 & 0.755 & 0.820 & 0.738 \\
-CoralSCOP    & 0.503 & 0.635 & 0.618 & 0.766 & 0.487 & 0.614 & 0.618 & 0.738 \\
+\multicolumn{9}{l}{\textit{In-Sample} ($n = 441$)} \\
+NeuralReefer & 0.714 & (0.010) & 0.813 & (0.008) & 0.882 & (0.007) & 0.792 & (0.009) \\
+Single CNN   & 0.695 & (0.010) & 0.801 & (0.008) & 0.851 & (0.008) & 0.783 & (0.009) \\
+CoralSCOP    & 0.503 & (0.011) & 0.635 & (0.011) & 0.618 & (0.011) & 0.766 & (0.012) \\
+\midrule
+\multicolumn{9}{l}{\textit{Out-of-Sample} ($n = 111$)} \\
+NeuralReefer & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
+Single CNN   & 0.641 & (0.021) & 0.755 & (0.019) & 0.820 & (0.019) & 0.738 & (0.021) \\
+CoralSCOP    & 0.487 & (0.023) & 0.614 & (0.024) & 0.618 & (0.023) & 0.738 & (0.026) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} All methods are scored identically (Section~\ref{sec:iou_dice}'s pixel-level IoU/Dice definitions) against the same 552 ground-truth annotations, split as elsewhere in this paper ($n=441$ training images, $n=111$ held-out test images). CoralSCOP is a binary coral/non-coral segmenter and is compared only on the Live Coral Cover task, for which it provides a directly comparable label. ``Single CNN'' is an ablation that replaces the 5-model ensemble with submodel 4 alone (otherwise identical pipeline), included as a non-ensemble baseline.
+\item \emph{Notes:} All methods are scored identically (Section~\ref{sec:iou_dice}'s pixel-level IoU/Dice definitions) against the same 552 ground-truth annotations, split as elsewhere in this paper ($n=441$ training images, $n=111$ held-out test images). Standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images. CoralSCOP is a binary coral/non-coral segmenter and is compared only on the Live Coral Cover task, for which it provides a directly comparable label. ``Single CNN'' is an ablation that replaces the 5-model ensemble with submodel 4 alone (otherwise identical pipeline), included as a non-ensemble baseline.
 \end{tablenotes}
 \end{table}
 
@@ -727,18 +749,18 @@ Because Yellowfin captures images at one-second intervals along a survey track, 
 \caption{Live coral cover IoU, Dice, and pixel accuracy on the test set, with vs.\ without spatially-contaminated test images excluded.}
 \label{tab:spatial-robustness}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrrrr}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lr rr rr rr}
 \toprule
-\textbf{Test subset} & $n$ & \textbf{IoU} & \textbf{Dice} & \textbf{Accuracy} \\
+\textbf{Test subset} & $n$ & \textbf{IoU} & & \textbf{Dice} & & \textbf{Accuracy} & \\
 \midrule
-All test images                & 111 & 0.674 & 0.781 & 0.872 \\
-Excluding images within 2\,m of a training image & 96  & 0.675 & 0.783 & 0.884 \\
-Excluding images within 5\,m of a training image & 39  & 0.720 & 0.821 & 0.903 \\
+All test images & 111 & 0.674 & (0.021) & 0.781 & (0.018) & 0.872 & (0.014) \\
+2\,m            &  96 & 0.675 & (0.021) & 0.783 & (0.020) & 0.884 & (0.014) \\
+5\,m            &  39 & 0.720 & (0.030) & 0.821 & (0.024) & 0.903 & (0.013) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} 6 of the 111 test images lack usable GPS/UTM coordinates and are excluded from this check entirely (retained in all other results in this paper). 15 of the remaining 105 geolocated test images fall within 2\,m of a training image; 72 of 105 fall within 5\,m, reflecting the survey's dense (roughly one-second-interval) sampling along a continuous track.
+\item \emph{Notes:} ``2\,m'' and ``5\,m'' denote subsets that exclude test images located within 2\,m and 5\,m of any training image (by UTM coordinates), respectively. 6 of the 111 test images lack usable GPS/UTM coordinates and are excluded from this spatial check but retained in all three subsets. 15 of the remaining 105 geolocated test images fall within 2\,m of a training image; 72 of 105 fall within 5\,m, reflecting the survey's dense (roughly one-second-interval) sampling along a continuous track. Standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images.
 \end{tablenotes}
 \end{table}
 

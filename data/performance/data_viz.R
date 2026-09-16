@@ -1237,14 +1237,20 @@ cat(length(contam_5m), "of", nrow(test_coords), "geolocated test images are with
 
 spatial_summary <- bind_rows(
   lcc_test_geo %>% summarise(subset = "All test images", n = n(),
-                              mean_iou = mean(iou), mean_dice = mean(dice_f1), mean_accuracy = mean(accuracy)),
+                              mean_iou      = mean(iou),      se_iou      = sd(iou)      / sqrt(n()),
+                              mean_dice     = mean(dice_f1),  se_dice     = sd(dice_f1)  / sqrt(n()),
+                              mean_accuracy = mean(accuracy), se_accuracy = sd(accuracy) / sqrt(n())),
   lcc_test_geo %>% filter(!image_id %in% contam_2m) %>%
-    summarise(subset = "Excl. 2m-contaminated", n = n(),
-              mean_iou = mean(iou), mean_dice = mean(dice_f1), mean_accuracy = mean(accuracy)),
+    summarise(subset = "2m", n = n(),
+              mean_iou      = mean(iou),      se_iou      = sd(iou)      / sqrt(n()),
+              mean_dice     = mean(dice_f1),  se_dice     = sd(dice_f1)  / sqrt(n()),
+              mean_accuracy = mean(accuracy), se_accuracy = sd(accuracy) / sqrt(n())),
   lcc_test_geo %>% filter(!image_id %in% contam_5m) %>%
-    summarise(subset = "Excl. 5m-contaminated", n = n(),
-              mean_iou = mean(iou), mean_dice = mean(dice_f1), mean_accuracy = mean(accuracy))
+    summarise(subset = "5m", n = n(),
+              mean_iou      = mean(iou),      se_iou      = sd(iou)      / sqrt(n()),
+              mean_dice     = mean(dice_f1),  se_dice     = sd(dice_f1)  / sqrt(n()),
+              mean_accuracy = mean(accuracy), se_accuracy = sd(accuracy) / sqrt(n()))
 )
-cat("\nLCC IoU/Dice/Accuracy, with vs. without spatially-contaminated test images excluded:\n")
+cat("\nLCC IoU/Dice/Accuracy (mean + SE = SD/sqrt(n)), with vs. without spatially-contaminated test images excluded:\n")
 print(spatial_summary, n = Inf)
 ################################################################################

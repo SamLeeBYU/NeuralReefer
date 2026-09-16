@@ -1,0 +1,312 @@
+\begin{thebibliography}{}
+
+\bibitem[Alonso et~al., 2017]{alonso2017}
+Alonso, I., Cambra, A., Munoz, A., Treibitz, T., and Murillo, A.~C. (2017).
+\newblock Coral-segmentation: Training dense labeling models with sparse ground
+  truth.
+\newblock In {\em 2017 {IEEE} International Conference on Computer Vision
+  Workshops ({ICCVW})}, pages 2874--2882. IEEE.
+
+\bibitem[Alonso et~al., 2019]{alonso2019}
+Alonso, I., Yuval, M., Eyal, G., Treibitz, T., and Murillo, A.~C. (2019).
+\newblock {CoralSeg}: Learning coral segmentation from sparse annotations.
+\newblock {\em J. Field Robot.}, 36(8):1456--1477.
+
+\bibitem[Asner et~al., 2022]{asner2022}
+Asner, G.~P., Vaughn, N.~R., Martin, R.~E., Foo, S.~A., Heckler, J., Neilson,
+  B.~J., and Gove, J.~M. (2022).
+\newblock Mapped coral mortality and refugia in an archipelago-scale marine
+  heat wave.
+\newblock {\em Proceedings of the National Academy of Sciences},
+  119(19):e2123331119.
+
+\bibitem[Ayad et~al., 2025]{ayad2025}
+Ayad, M., Lee, C.~M., Porter, J.~W., Chirayath, V., Nivison, C.~L., Vaughn,
+  K.~M., and Kudela, R. (2025).
+\newblock Impacts of the 2023 marine heatwave in the florida keys: Detection
+  and analysis of a mass coral bleaching event using spaceborne remote sensing
+  imagery.
+\newblock {\em Environmental science \& technology}, 59(29):15227--15235.
+
+\bibitem[Beijbom et~al., 2012]{beijbom2012}
+Beijbom, O., Edmunds, P.~J., Kline, D.~I., Mitchell, B.~G., and Kriegman, D.
+  (2012).
+\newblock Automated annotation of coral reef survey images.
+\newblock In {\em 2012 {IEEE} Conference on Computer Vision and Pattern
+  Recognition}, pages 1170--1177. IEEE.
+
+\bibitem[Birkart and {\'A}lvarez-Filip, 2025]{birkart2025}
+Birkart, L.~V. and {\'A}lvarez-Filip, L. (2025).
+\newblock 2023 global heatwave causes mass mortality of a keystone coral on
+  shallow western atlantic reefs.
+\newblock {\em iScience}, 28(11).
+
+\bibitem[Bostr{\"o}m-Einarsson et~al., 2020]{bostrom2020}
+Bostr{\"o}m-Einarsson, L., Babcock, R.~C., Bayraktarov, E., Ceccarelli, D.,
+  Cook, N., Ferse, S.~C., Hancock, B., Harrison, P., Hein, M., Shaver, E.,
+  et~al. (2020).
+\newblock Coral restoration--a systematic review of current methods, successes,
+  failures and future directions.
+\newblock {\em PloS one}, 15(1):e0226631.
+
+\bibitem[Burke et~al., 2011]{burke2011reefs}
+Burke, L., Reytar, K., Spalding, M., and Perry, A. (2011).
+\newblock {\em Reefs at Risk Revisited}.
+\newblock World Resources Institute.
+
+\bibitem[Chapelle et~al., 2001]{chapelle2001vicinal}
+Chapelle, O., Weston, J., Bottou, L., and Vapnik, V. (2001).
+\newblock Vicinal risk minimization.
+\newblock {\em Advances in neural information processing systems}, 13.
+
+\bibitem[Costanza et~al., 2014]{costanza2014}
+Costanza, R., De~Groot, R., Sutton, P., Van~der Ploeg, S., Anderson, S.~J.,
+  Kubiszewski, I., Farber, S., and Turner, R.~K. (2014).
+\newblock Changes in the global value of ecosystem services.
+\newblock {\em Global environmental change}, 26:152--158.
+
+\bibitem[Cresswell et~al., 2021]{cresswell2021}
+Cresswell, A.~K., Ryan, N.~M., Heyward, A.~J., Smith, A.~N., Colquhoun, J.,
+  Case, M., Birt, M.~J., Chinkin, M., Wyatt, M., Radford, B., et~al. (2021).
+\newblock A quantitative comparison of towed-camera and diver-camera transects
+  for monitoring coral reefs.
+\newblock {\em PeerJ}, 9:e11090.
+
+\bibitem[Cubuk et~al., 2019]{cubuk2019autoaugment}
+Cubuk, E.~D., Zoph, B., Mane, D., Vasudevan, V., and Le, Q.~V. (2019).
+\newblock Autoaugment: Learning augmentation strategies from data.
+\newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
+  Pattern Recognition}, pages 113--123.
+
+\bibitem[Deng et~al., 2014]{deng2014large}
+Deng, J., Ding, N., Jia, Y., Frome, A., Murphy, K., Bengio, S., Li, Y., Neven,
+  H., and Adam, H. (2014).
+\newblock Large-scale object classification using label relation graphs.
+\newblock In {\em European conference on computer vision}, pages 48--64.
+  Springer.
+
+\bibitem[Dietterich, 2000]{dietterich2000ensemble}
+Dietterich, T.~G. (2000).
+\newblock Ensemble methods in machine learning.
+\newblock {\em International Workshop on Multiple Classifier Systems}, pages
+  1--15.
+
+\bibitem[He et~al., 2016]{he2016deep}
+He, K., Zhang, X., Ren, S., and Sun, J. (2016).
+\newblock Deep residual learning for image recognition.
+\newblock In {\em Proceedings of the IEEE conference on computer vision and
+  pattern recognition (CVPR)}, pages 770--778.
+
+\bibitem[Hughes et~al., 2017]{hughes2017}
+Hughes, T.~P., Kerry, J.~T., {\'A}lvarez-Noriega, M., {\'A}lvarez-Romero,
+  J.~G., Anderson, K.~D., Baird, A.~H., Babcock, R.~C., Beger, M., Bellwood,
+  D.~R., Berkelmans, R., et~al. (2017).
+\newblock Global warming and recurrent mass bleaching of corals.
+\newblock {\em Nature}, 543(7645):373--377.
+
+\bibitem[Hunter and Lange, 2004]{hunterlange2004mm}
+Hunter, D.~R. and Lange, K. (2004).
+\newblock A tutorial on {MM} algorithms.
+\newblock {\em The American Statistician}, 58(1):30--37.
+
+\bibitem[Jokiel et~al., 2015]{peerj954}
+Jokiel, P.~L., Rodgers, K.~S., Brown, E.~K., Kenyon, J.~C., Aeby, G., Smith,
+  W.~R., and Farrell, F. (2015).
+\newblock Comparison of methods used to estimate coral cover in the hawaiian
+  islands.
+\newblock {\em PeerJ}, 3:e954.
+
+\bibitem[Josephitis et~al., 2012]{josephitis2012}
+Josephitis, E., Wilson, S., Moore, J.~A., and Field, S. (2012).
+\newblock Comparison of three digital image analysis techniques for assessment
+  of coral cover and bleaching.
+\newblock {\em Conservation Science Western Australia}, 8(2):251--257.
+
+\bibitem[King et~al., 2018]{king2018}
+King, A., Bhandarkar, S.~M., and Hopkinson, B.~M. (2018).
+\newblock A comparison of deep learning methods for semantic segmentation of
+  coral reef survey images.
+\newblock In {\em 2018 {IEEE/CVF} Conference on Computer Vision and Pattern
+  Recognition Workshops ({CVPRW})}. IEEE.
+
+\bibitem[Kirillov et~al., 2023]{kirillov2023segment}
+Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao,
+  T., Whitehead, S., Berg, A.~C., Lo, W.-Y., Doll{\'a}r, P., and Girshick, R.
+  (2023).
+\newblock Segment anything.
+\newblock In {\em Proceedings of the IEEE International Conference on Computer
+  Vision}, pages 4015--4026.
+
+\bibitem[Kohler and Gill, 2006]{kohlergill2006}
+Kohler, K.~E. and Gill, S.~M. (2006).
+\newblock Coral point count with excel extensions ({CPCe)}: A visual basic
+  program for the determination of coral and substrate coverage using random
+  point count methodology.
+\newblock {\em Comput. Geosci.}, 32(9):1259--1269.
+
+\bibitem[Kopecky et~al., 2023]{kopecky2023}
+Kopecky, K.~L., Pavoni, G., Nocerino, E., Brooks, A.~J., Corsini, M., Menna,
+  F., Gallagher, J.~P., Capra, A., Castagnetti, C., Rossi, P., Gruen, A.,
+  Neyer, F., Muntoni, A., Ponchio, F., Cignoni, P., Troyer, M., Holbrook,
+  S.~J., and Schmitt, R.~J. (2023).
+\newblock Quantifying the loss of coral from a bleaching event using underwater
+  photogrammetry and {AI-assisted} image segmentation.
+\newblock {\em Remote Sens. (Basel)}, 15(16):4077.
+
+\bibitem[Lawson et~al., 2025]{lawson2025}
+Lawson, C.~L., Chartrand, K.~M., Roelfsema, C.~M., Kolluru, A., and Mumby,
+  P.~J. (2025).
+\newblock Broadscale reconnaissance of coral reefs from citizen science and
+  deep learning.
+\newblock {\em Environ. Monit. Assess.}, 197(7):814.
+
+\bibitem[Li et~al., 2024]{li2024}
+Li, Z., Zhao, S., Lu, Y., Song, C., Huang, R., and Yu, K. (2024).
+\newblock Deep learning-based automatic estimation of live coral cover from
+  underwater video for coral reef health monitoring.
+\newblock {\em J. Mar. Sci. Eng.}, 12(11):1980.
+
+\bibitem[Lian et~al., 2024]{usis10k2024}
+Lian, S., Zhang, Z., Li, H., Li, W., Yang, L.~T., Kwong, S., and Cong, R.
+  (2024).
+\newblock Diving into underwater: Segment anything model guided underwater
+  salient instance segmentation and a large-scale dataset.
+\newblock In {\em Proceedings of the 41st International Conference on Machine
+  Learning (ICML)}.
+
+\bibitem[Lipton et~al., 2014]{lipton2014fbeta}
+Lipton, Z.~C., Elkan, C., and Naryanaswamy, B. (2014).
+\newblock Optimal thresholding of classifiers to maximize {F1} measure.
+\newblock In {\em Joint European Conference on Machine Learning and Knowledge
+  Discovery in Databases (ECML PKDD)}, pages 225--239. Springer.
+
+\bibitem[Macrohon and Hung, 2025]{macrohonhung2025}
+Macrohon, J. J.~E. and Hung, G. (2025).
+\newblock Deep learning models for coral bleaching classification in
+  multi-condition underwater image datasets.
+
+\bibitem[McDonald-Madden et~al., 2010]{mcdonald2010}
+McDonald-Madden, E., Baxter, P.~W., Fuller, R.~A., Martin, T.~G., Game, E.~T.,
+  Montambault, J., and Possingham, H.~P. (2010).
+\newblock Monitoring does not always count.
+\newblock {\em Trends in ecology \& evolution}, 25(10):547--550.
+
+\bibitem[Nam et~al., 2014]{nam2014large}
+Nam, J., Kim, J., Loza~Menc{\'i}a, E., Gurevych, I., and F{\"u}rnkranz, J.
+  (2014).
+\newblock Large-scale multi-label text classification—revisiting neural
+  networks.
+\newblock In {\em ECML PKDD}, pages 437--452.
+
+\bibitem[Raber and Schill, 2019]{raber2019}
+Raber, G.~T. and Schill, S.~R. (2019).
+\newblock Reef rover: A low-cost small autonomous unmanned surface vehicle
+  (usv) for mapping and monitoring coral reefs.
+\newblock {\em Drones}, 3(2):38.
+
+\bibitem[Ravi et~al., 2024]{ravi2024sam2}
+Ravi, N., Gabeur, V., Hu, Y.-T., Hu, R., Ryali, C., Ma, T., Khedr, H.,
+  R{\"a}dle, R., Rolland, C., Gustafson, L., Mintun, E., Pan, J., Alwala,
+  K.~V., Carion, N., Wu, C.-Y., Girshick, R., Doll{\'a}r, P., and
+  Feichtenhofer, C. (2024).
+\newblock {SAM 2}: Segment anything in images and videos.
+\newblock {\em arXiv preprint arXiv:2408.00714}.
+
+\bibitem[Reaka-Kudla, 1997]{reakakudla1997}
+Reaka-Kudla, M.~L. (1997).
+\newblock The global biodiversity of coral reefs: A comparison with rain
+  forests.
+\newblock In Reaka-Kudla, M.~L., Wilson, D.~E., and Wilson, E.~O., editors,
+  {\em Biodiversity II: Understanding and Protecting Our Biological Resources},
+  pages 83--108. Joseph Henry Press, Washington, DC.
+
+\bibitem[Rivera-Sosa et~al., 2025]{rivera2025}
+Rivera-Sosa, A., Mu{\~n}iz-Castillo, A.~I., Charo, B., Asner, G.~P., Roelfsema,
+  C.~M., Donner, S.~D., Bambic, B.~D., Bonelli, A.~G., Pomeroy, M., Manzello,
+  D., et~al. (2025).
+\newblock Six decades of global coral bleaching monitoring: a review of methods
+  and call for enhanced standardization and coordination.
+\newblock {\em Frontiers in Marine Science}, 12:1547870.
+
+\bibitem[Roboflow, 2020]{roboflow2020}
+Roboflow (2020).
+\newblock Roboflow: Annotate, manage, and deploy computer vision datasets.
+\newblock \url{https://roboflow.com}.
+\newblock Accessed: 2025-07-28.
+
+\bibitem[Sing~Wong et~al., 2022]{sing2022}
+Sing~Wong, A., Vrontos, S., and Taylor, M.~L. (2022).
+\newblock An assessment of people living by coral reefs over space and time.
+\newblock {\em Global Change Biology}, 28(23):7139--7153.
+
+\bibitem[Spady et~al., 2025]{spady2025}
+Spady, B., Skirving, W., De~La~Cour, J., Geiger, E., Liu, G., Hoegh-Guldberg,
+  O., Norrie, A., Heron, S., Pomeroy, M., Kolodziej, G., and Manzello, D.
+  (2025).
+\newblock The 4th global coral bleaching event: Unprecedented, unbounded,
+  unrelenting.
+
+\bibitem[Strain et~al., 2019]{strain2019}
+Strain, E.~M., Edgar, G.~J., Ceccarelli, D., Stuart-Smith, R.~D., Hosack,
+  G.~R., and Thomson, R.~J. (2019).
+\newblock A global assessment of the direct and indirect benefits of marine
+  protected areas for coral reef conservation.
+\newblock {\em Diversity and Distributions}, 25(1):9--20.
+
+\bibitem[Vega~Thurber et~al., 2025]{vega2025}
+Vega~Thurber, R.~L., Silva, D., Speare, L., Croquer, A., Veglia, A.~J.,
+  Alvarez-Filip, L., Zaneveld, J.~R., Muller, E.~M., and Correa, A.~M. (2025).
+\newblock Coral disease: Direct and indirect agents, mechanisms of disease, and
+  innovations for increasing resistance and resilience.
+\newblock {\em Annual Review of Marine Science}, 17(1):227--255.
+
+\bibitem[Wang et~al., 2016]{wang2016cnn}
+Wang, J., Yang, Y., Mao, J., Huang, Z., Huang, C., and Xu, W. (2016).
+\newblock Cnn-rnn: A unified framework for multi-label image classification.
+\newblock In {\em CVPR}, pages 2285--2294.
+
+\bibitem[Wehrmann et~al., 2018]{wehrmann2018hierarchical}
+Wehrmann, J., Cerri, R., and Barros, R. (2018).
+\newblock Hierarchical multi-label classification networks.
+\newblock In {\em International conference on machine learning}, pages
+  5225--5234. PMLR.
+
+\bibitem[Wolpert, 1992]{wolpert1992stacked}
+Wolpert, D.~H. (1992).
+\newblock Stacked generalization.
+\newblock In {\em Neural Networks}, volume~5, pages 241--259. Elsevier.
+
+\bibitem[Zhang et~al., 2018]{zhang2018mixup}
+Zhang, H., Cisse, M., Dauphin, Y.~N., and Lopez-Paz, D. (2018).
+\newblock mixup: Beyond empirical risk minimization.
+\newblock In {\em International Conference on Learning Representations (ICLR)}.
+
+\bibitem[Zhang et~al., 2022]{zhang2022}
+Zhang, H., Gruen, A., and Li, M. (2022).
+\newblock Deep learning for semantic segmentation of coral images in underwater
+  photogrammetry.
+\newblock {\em ISPRS Ann. Photogramm. Remote Sens. Spat. Inf. Sci.},
+  V-2-2022:343--350.
+
+\bibitem[Zhang et~al., 2024]{zhang2024}
+Zhang, H., Li, M., Zhong, J., and Qin, J. (2024).
+\newblock {CNet}: A novel seabed coral reef image segmentation approach based
+  on deep learning.
+\newblock In {\em 2024 {IEEE/CVF} Winter Conference on Applications of Computer
+  Vision Workshops ({WACVW})}, pages 767--775. IEEE.
+
+\bibitem[Zheng et~al., 2024]{zheng2024}
+Zheng, Z., Liang, H., Hua, B.-S., Wong, Y.~H., Ang, P., Chui, A. P.~Y., and
+  Yeung, S.-K. (2024).
+\newblock Coralscop: Segment any coral image on this planet.
+\newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
+  Pattern Recognition}, pages 28170--28180.
+
+\bibitem[Zheng et~al., 2025]{zheng2025}
+Zheng, Z., Liang, H., Wut, F.~H., Wong, Y.~H., Chui, A. P.-Y., and Yeung, S.-K.
+  (2025).
+\newblock {HKCoral}: Benchmark for dense coral growth form segmentation in the
+  wild.
+\newblock {\em IEEE J. Ocean. Eng.}, 50(2):697--713.
+
+\end{thebibliography}

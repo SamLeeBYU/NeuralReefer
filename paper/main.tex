@@ -102,8 +102,8 @@
   \makebox[0pt][l]{\raisebox{0.45ex}{\rule{\wd\revdelbox}{0.4pt}}}\usebox\revdelbox
 }
 
-% ---------- Homogenized table width: measure the widest table (SAM2 tuned
-% parameters, Table 2) once, then size every other table's tabular* to that SAME natural width
+% ---------- Homogenized table width: measure the widest table (IoU/Dice by
+% taxonomy, Table 6) once, then size every other table's tabular* to that SAME natural width
 % (via @{\extracolsep{\fill}}, so their columns stretch/pad out to match) before each
 % is independently \resizebox{\linewidth}{!}{...}'d for display---since every table
 % starts from the same pre-resize width and is resized by the same target width, they
@@ -163,35 +163,27 @@ Coral reefs \sep Machine vision \sep Ecological monitoring \sep Semantic segment
 
 % Built here (before its own textual placement) so every other table's tabular*
 % can reference \wd\perftablebox for a shared, homogenized column width. This is
-% Table 2's content (the widest of the five, confirmed by direct measurement --
+% Table 6's content (the widest table, confirmed by direct measurement --
 % re-check with a width probe if any table's content changes materially, since
-% the widest table can change). Table 2 itself is later displayed via
-% \resizebox{\linewidth}{!}{\usebox{\perftablebox}} at its normal location.
-% Content here must stay IDENTICAL to Table 2 below.
+% the widest table can change). Table 6 itself is later displayed via its own
+% \begin{tabular*}{\wd\perftablebox}{...} at its normal location.
+% Content here must stay IDENTICAL to Table 6 below.
 \sbox{\perftablebox}{%
-\begin{tabular}{ll@{\hspace{4pt}}r@{\hspace{4pt}}r}
+\begin{tabular}{lrr rr rr rr}
 \toprule
-\textbf{Parameter} & \textbf{Description} & \textbf{Large} & \textbf{Small} \\
+\textbf{Class} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
-\multicolumn{4}{l}{\textit{Segmentation Parameters}} \\
-\texttt{points\_per\_side} & Grid resolution for prompt points & 4 & 21 \\
-\texttt{points\_per\_batch} & Prompt points per batch & 36 & 64 \\
-\texttt{pred\_iou\_thresh} & Minimum predicted IoU for mask retention & 0.3301 & 0.3275 \\
-\texttt{stability\_score\_thresh} & Threshold on SAM2 stability score & 0.1785 & 0.4271 \\
-\texttt{stability\_score\_offset} & Offset added to stability score & 0.9626 & 0.9404 \\
-\texttt{crop\_n\_layers} & Number of pyramid crop layers & 0 & 0 \\
-\texttt{box\_nms\_thresh} & IoU threshold for NMS suppression & 0.4803 & 0.4677 \\
-\texttt{crop\_n\_points\_downscale\_factor} & Crop grid downscale factor & 1 & 1 \\
-\texttt{min\_mask\_region\_area} & Minimum mask area (pixels) & 10{,}000 & 400 \\
+Live Coral Cover (all coral) & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
+Bleached (any genus)         & 0.350 & (0.033) & 0.427 & (0.034) & 0.635 & (0.037) & 0.395 & (0.037) \\
 \midrule
-\multicolumn{2}{l}{\textit{Postprocessing and Augmentation Parameters}} & & \\
-\texttt{overlap} & Max allowed mask overlap during merging & 0.0280 & \\
-\texttt{solidarity} & Inter-mask consistency weighting & 0.7148 & \\
-\texttt{clipLimit} & CLAHE contrast enhancement limit & 9 & \\
-\texttt{tileGridSize} & Grid size for CLAHE transformation & 8 & \\
-\texttt{redBoost} & Red channel intensity multiplier & 1.2718 & \\
-\texttt{whiteBalance} & Apply white balance correction & \texttt{True} & \\
-\texttt{gamma} & Gamma correction for normalization & 0.7780 & \\
+Branching Acropora & 0.728 & (0.038) & 0.752 & (0.038) & 0.752 & (0.062) & 0.501 & (0.063) \\
+Finger Acropora    & 0.619 & (0.031) & 0.702 & (0.030) & 0.794 & (0.024) & 0.679 & (0.034) \\
+Finger Porites     & 0.674 & (0.041) & 0.698 & (0.040) & 0.511 & (0.065) & 0.475 & (0.063) \\
+Knob Porites       & 0.720 & (0.037) & 0.754 & (0.035) & 0.623 & (0.060) & 0.500 & (0.058) \\
+Mounding           & 0.452 & (0.040) & 0.501 & (0.040) & 0.484 & (0.051) & 0.320 & (0.040) \\
+Oddball            & 0.473 & (0.047) & 0.475 & (0.047) & 0.050 & (0.034) & 0.057 & (0.035) \\
+Pocillopora        & 0.673 & (0.040) & 0.702 & (0.039) & 0.564 & (0.063) & 0.542 & (0.062) \\
+Table Acropora     & 0.622 & (0.043) & 0.642 & (0.043) & 0.360 & (0.064) & 0.431 & (0.070) \\
 \bottomrule
 \end{tabular}%
 }
@@ -363,7 +355,33 @@ To tailor the SAM2-based segmentation module for detecting coral colonies across
 \centering
 \caption{Tuned parameters for SAM2 segmentation and preprocessing augmentations. Segmentation parameters are tuned separately for large and small object detection, while postprocessing and augmentation parameters are shared.}
 \label{tab:sam2-tuned-params}
-\resizebox{\linewidth}{!}{\usebox{\perftablebox}}
+\resizebox{\linewidth}{!}{%
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} ll@{\hspace{4pt}}r@{\hspace{4pt}}r}
+\toprule
+\textbf{Parameter} & \textbf{Description} & \textbf{Large} & \textbf{Small} \\
+\midrule
+\multicolumn{4}{l}{\textit{Segmentation Parameters}} \\
+\texttt{points\_per\_side} & Grid resolution for prompt points & 4 & 21 \\
+\texttt{points\_per\_batch} & Prompt points per batch & 36 & 64 \\
+\texttt{pred\_iou\_thresh} & Minimum predicted IoU for mask retention & 0.3301 & 0.3275 \\
+\texttt{stability\_score\_thresh} & Threshold on SAM2 stability score & 0.1785 & 0.4271 \\
+\texttt{stability\_score\_offset} & Offset added to stability score & 0.9626 & 0.9404 \\
+\texttt{crop\_n\_layers} & Number of pyramid crop layers & 0 & 0 \\
+\texttt{box\_nms\_thresh} & IoU threshold for NMS suppression & 0.4803 & 0.4677 \\
+\texttt{crop\_n\_points\_downscale\_factor} & Crop grid downscale factor & 1 & 1 \\
+\texttt{min\_mask\_region\_area} & Minimum mask area (pixels) & 10{,}000 & 400 \\
+\midrule
+\multicolumn{2}{l}{\textit{Postprocessing and Augmentation Parameters}} & & \\
+\texttt{overlap} & Max allowed mask overlap during merging & 0.0280 & \\
+\texttt{solidarity} & Inter-mask consistency weighting & 0.7148 & \\
+\texttt{clipLimit} & CLAHE contrast enhancement limit & 9 & \\
+\texttt{tileGridSize} & Grid size for CLAHE transformation & 8 & \\
+\texttt{redBoost} & Red channel intensity multiplier & 1.2718 & \\
+\texttt{whiteBalance} & Apply white balance correction & \texttt{True} & \\
+\texttt{gamma} & Gamma correction for normalization & 0.7780 & \\
+\bottomrule
+\end{tabular*}%
+}
 \begin{tablenotes}
 \item \emph{Notes: ``Large'' and ``Small'' denote the two SAM2 mask-proposal configurations tuned separately for large and small coral structures (Section~\ref{sec:sam2}), not distinct model sizes. Postprocessing and augmentation parameters are shared between the two configurations and are reported once, under the Large column.}
 \end{tablenotes}
@@ -695,26 +713,26 @@ These results support out-of-sample generalization within the Majuro domain, whe
 \caption{Pixel-level IoU, Dice, precision, and recall by taxonomic class, macro-averaged over the 111-image held-out test set.}
 \label{tab:iou-dice-taxonomy}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrrrr}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrr rr rr rr}
 \toprule
-\textbf{Class} & \textbf{IoU} & \textbf{Dice} & \textbf{Precision} & \textbf{Recall} \\
+\textbf{Class} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
-Live Coral Cover (all coral) & 0.674 & 0.781 & 0.848 & 0.780 \\
-Bleached (any genus)         & 0.350 & 0.427 & 0.635 & 0.395 \\
+Live Coral Cover (all coral) & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
+Bleached (any genus)         & 0.350 & (0.033) & 0.427 & (0.034) & 0.635 & (0.037) & 0.395 & (0.037) \\
 \midrule
-Branching Acropora & 0.728 & 0.752 & 0.752 & 0.501 \\
-Finger Acropora    & 0.619 & 0.702 & 0.794 & 0.679 \\
-Finger Porites     & 0.674 & 0.698 & 0.511 & 0.475 \\
-Knob Porites       & 0.720 & 0.754 & 0.623 & 0.500 \\
-Mounding           & 0.452 & 0.501 & 0.484 & 0.320 \\
-Oddball            & 0.473 & 0.475 & 0.050 & 0.057 \\
-Pocillopora        & 0.673 & 0.702 & 0.564 & 0.542 \\
-Table Acropora     & 0.622 & 0.642 & 0.360 & 0.431 \\
+Branching Acropora & 0.728 & (0.038) & 0.752 & (0.038) & 0.752 & (0.062) & 0.501 & (0.063) \\
+Finger Acropora    & 0.619 & (0.031) & 0.702 & (0.030) & 0.794 & (0.024) & 0.679 & (0.034) \\
+Finger Porites     & 0.674 & (0.041) & 0.698 & (0.040) & 0.511 & (0.065) & 0.475 & (0.063) \\
+Knob Porites       & 0.720 & (0.037) & 0.754 & (0.035) & 0.623 & (0.060) & 0.500 & (0.058) \\
+Mounding           & 0.452 & (0.040) & 0.501 & (0.040) & 0.484 & (0.051) & 0.320 & (0.040) \\
+Oddball            & 0.473 & (0.047) & 0.475 & (0.047) & 0.050 & (0.034) & 0.057 & (0.035) \\
+Pocillopora        & 0.673 & (0.040) & 0.702 & (0.039) & 0.564 & (0.063) & 0.542 & (0.062) \\
+Table Acropora     & 0.622 & (0.043) & 0.642 & (0.043) & 0.360 & (0.064) & 0.431 & (0.070) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} IoU and Dice are computed per image at the pixel level (union of masks of the given class vs.\ everything else) and averaged across the 111 test images. Genus-level precision/recall are lower than the coral-vs-non-coral (``Live Coral Cover'') row because they require the correct genus label, as opposed to merely correct coral/non-coral discrimination; the Oddball class's especially low precision/recall reflects its heterogeneous composition and low training frequency (Table~\ref{tab:mask-cover}).
+\item \emph{Notes:} IoU and Dice are computed per image at the pixel level (union of masks of the given class vs.\ everything else) and averaged across the 111 test images; standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images. Genus-level precision/recall are lower than the coral-vs-non-coral (``Live Coral Cover'') row because they require the correct genus label, as opposed to merely correct coral/non-coral discrimination; the Oddball class's especially low precision/recall reflects its heterogeneous composition and low training frequency (Table~\ref{tab:mask-cover}).
 \end{tablenotes}
 \end{table}}
 
@@ -729,20 +747,24 @@ Table Acropora     & 0.622 & 0.642 & 0.360 & 0.431 \\
 \caption{Live coral cover (coral vs.\ non-coral) segmentation quality: NeuralReefer vs.\ CoralSCOP.}
 \label{tab:coralscop-comparison}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lcccccccc}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrr rr rr rr}
 \toprule
- & \multicolumn{4}{c}{\textbf{In-Sample} ($n=441$)} & \multicolumn{4}{c}{\textbf{Out-of-Sample} ($n=111$)} \\
-\cmidrule(lr){2-5} \cmidrule(lr){6-9}
-\textbf{Method} & IoU & Dice & Precision & Recall & IoU & Dice & Precision & Recall \\
+\textbf{Method} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
-NeuralReefer & 0.714 & 0.813 & 0.882 & 0.792 & 0.674 & 0.781 & 0.848 & 0.780 \\
-Single CNN   & 0.695 & 0.801 & 0.851 & 0.783 & 0.641 & 0.755 & 0.820 & 0.738 \\
-CoralSCOP    & 0.503 & 0.635 & 0.618 & 0.766 & 0.487 & 0.614 & 0.618 & 0.738 \\
+\multicolumn{9}{l}{\textit{In-Sample} ($n = 441$)} \\
+NeuralReefer & 0.714 & (0.010) & 0.813 & (0.008) & 0.882 & (0.007) & 0.792 & (0.009) \\
+Single CNN   & 0.695 & (0.010) & 0.801 & (0.008) & 0.851 & (0.008) & 0.783 & (0.009) \\
+CoralSCOP    & 0.503 & (0.011) & 0.635 & (0.011) & 0.618 & (0.011) & 0.766 & (0.012) \\
+\midrule
+\multicolumn{9}{l}{\textit{Out-of-Sample} ($n = 111$)} \\
+NeuralReefer & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
+Single CNN   & 0.641 & (0.021) & 0.755 & (0.019) & 0.820 & (0.019) & 0.738 & (0.021) \\
+CoralSCOP    & 0.487 & (0.023) & 0.614 & (0.024) & 0.618 & (0.023) & 0.738 & (0.026) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} All methods are scored identically (Section~\ref{sec:iou_dice}'s pixel-level IoU/Dice definitions) against the same 552 ground-truth annotations, split as elsewhere in this paper ($n=441$ training images, $n=111$ held-out test images). CoralSCOP is a binary coral/non-coral segmenter and is compared only on the Live Coral Cover task, for which it provides a directly comparable label. ``Single CNN'' is an ablation that replaces the 5-model ensemble with submodel 4 alone (otherwise identical pipeline), included as a non-ensemble baseline.
+\item \emph{Notes:} All methods are scored identically (Section~\ref{sec:iou_dice}'s pixel-level IoU/Dice definitions) against the same 552 ground-truth annotations, split as elsewhere in this paper ($n=441$ training images, $n=111$ held-out test images). Standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images. CoralSCOP is a binary coral/non-coral segmenter and is compared only on the Live Coral Cover task, for which it provides a directly comparable label. ``Single CNN'' is an ablation that replaces the 5-model ensemble with submodel 4 alone (otherwise identical pipeline), included as a non-ensemble baseline.
 \end{tablenotes}
 \end{table}}
 
@@ -834,18 +856,18 @@ The machine vision pipeline, including segmentation and classification steps, is
 \caption{Live coral cover IoU, Dice, and pixel accuracy on the test set, with vs.\ without spatially-contaminated test images excluded.}
 \label{tab:spatial-robustness}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrrrr}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lr rr rr rr}
 \toprule
-\textbf{Test subset} & $n$ & \textbf{IoU} & \textbf{Dice} & \textbf{Accuracy} \\
+\textbf{Test subset} & $n$ & \textbf{IoU} & & \textbf{Dice} & & \textbf{Accuracy} & \\
 \midrule
-All test images                & 111 & 0.674 & 0.781 & 0.872 \\
-Excluding images within 2\,m of a training image & 96  & 0.675 & 0.783 & 0.884 \\
-Excluding images within 5\,m of a training image & 39  & 0.720 & 0.821 & 0.903 \\
+All test images & 111 & 0.674 & (0.021) & 0.781 & (0.018) & 0.872 & (0.014) \\
+2\,m            &  96 & 0.675 & (0.021) & 0.783 & (0.020) & 0.884 & (0.014) \\
+5\,m            &  39 & 0.720 & (0.030) & 0.821 & (0.024) & 0.903 & (0.013) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} 6 of the 111 test images lack usable GPS/UTM coordinates and are excluded from this check entirely (retained in all other results in this paper). 15 of the remaining 105 geolocated test images fall within 2\,m of a training image; 72 of 105 fall within 5\,m, reflecting the survey's dense (roughly one-second-interval) sampling along a continuous track.
+\item \emph{Notes:} ``2\,m'' and ``5\,m'' denote subsets that exclude test images located within 2\,m and 5\,m of any training image (by UTM coordinates), respectively. 6 of the 111 test images lack usable GPS/UTM coordinates and are excluded from this spatial check but retained in all three subsets. 15 of the remaining 105 geolocated test images fall within 2\,m of a training image; 72 of 105 fall within 5\,m, reflecting the survey's dense (roughly one-second-interval) sampling along a continuous track. Standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images.
 \end{tablenotes}
 \end{table}}
 
