@@ -611,6 +611,8 @@ class SAM2Segmenter:
         ax.imshow(self.image)
         if labels is not None:
             for mask, label in zip(masks, labels):
+                if label not in color_map:
+                    continue
                 color = color_map[label]
                 self._show_single_mask(ax, mask['segmentation'], color=color, label=(label if show_labels else None))
         else:

@@ -39,7 +39,7 @@ Beijbom, O., Edmunds, P.~J., Kline, D.~I., Mitchell, B.~G., and Kriegman, D.
 Birkart, L.~V. and {\'A}lvarez-Filip, L. (2025).
 \newblock 2023 global heatwave causes mass mortality of a keystone coral on
   shallow western atlantic reefs.
-\newblock {\em iScience}, 28(11).
+\newblock {\em iScience}, 28(11):113722.
 
 \bibitem[Bostr{\"o}m-Einarsson et~al., 2020]{bostrom2020}
 Bostr{\"o}m-Einarsson, L., Babcock, R.~C., Bayraktarov, E., Ceccarelli, D.,
@@ -48,6 +48,12 @@ Bostr{\"o}m-Einarsson, L., Babcock, R.~C., Bayraktarov, E., Ceccarelli, D.,
 \newblock Coral restoration--a systematic review of current methods, successes,
   failures and future directions.
 \newblock {\em PloS one}, 15(1):e0226631.
+
+\bibitem[Buda et~al., 2018]{buda2018}
+Buda, M., Maki, A., and Mazurowski, M.~A. (2018).
+\newblock A systematic study of the class imbalance problem in convolutional
+  neural networks.
+\newblock {\em Neural Networks}, 106:249--259.
 
 \bibitem[Burke et~al., 2011]{burke2011reefs}
 Burke, L., Reytar, K., Spalding, M., and Perry, A. (2011).
@@ -91,6 +97,16 @@ Dietterich, T.~G. (2000).
 \newblock {\em International Workshop on Multiple Classifier Systems}, pages
   1--15.
 
+\bibitem[Gonz{\'a}lez-Rivero et~al., 2020]{gonzalezrivero2020}
+Gonz{\'a}lez-Rivero, M., Beijbom, O., Rodriguez-Ramirez, A., Bryant, D. E.~P.,
+  Ganase, A., Gonzalez-Marrero, Y., Herrera-Reveles, A., Kennedy, E.~V., Kim,
+  C. J.~S., Lopez-Marcano, S., Markey, K., Neal, B.~P., Osborne, K.,
+  Reyes-Nivia, C., Sampayo, E.~M., Stolberg, K., Taylor, A., Vercelloni, J.,
+  Wyatt, M., and Hoegh-Guldberg, O. (2020).
+\newblock Monitoring of coral reefs using artificial intelligence: A feasible
+  and cost-effective approach.
+\newblock {\em Remote Sensing}, 12(3):489.
+
 \bibitem[He et~al., 2016]{he2016deep}
 He, K., Zhang, X., Ren, S., and Sun, J. (2016).
 \newblock Deep residual learning for image recognition.
@@ -108,6 +124,12 @@ Hughes, T.~P., Kerry, J.~T., {\'A}lvarez-Noriega, M., {\'A}lvarez-Romero,
 Hunter, D.~R. and Lange, K. (2004).
 \newblock A tutorial on {MM} algorithms.
 \newblock {\em The American Statistician}, 58(1):30--37.
+
+\bibitem[Jocher et~al., 2023]{yolov8}
+Jocher, G., Chaurasia, A., and Qiu, J. (2023).
+\newblock Ultralytics {YOLOv8}.
+\newblock \url{https://github.com/ultralytics/ultralytics}.
+\newblock Version 8.0.0, computer software.
 
 \bibitem[Jokiel et~al., 2015]{peerj954}
 Jokiel, P.~L., Rodgers, K.~S., Brown, E.~K., Kenyon, J.~C., Aeby, G., Smith,
@@ -172,7 +194,7 @@ Lian, S., Zhang, Z., Li, H., Li, W., Yang, L.~T., Kwong, S., and Cong, R.
 \newblock Diving into underwater: Segment anything model guided underwater
   salient instance segmentation and a large-scale dataset.
 \newblock In {\em Proceedings of the 41st International Conference on Machine
-  Learning (ICML)}.
+  Learning}, volume 235, pages 29545--29559. PMLR.
 
 \bibitem[Lipton et~al., 2014]{lipton2014fbeta}
 Lipton, Z.~C., Elkan, C., and Naryanaswamy, B. (2014).
@@ -204,13 +226,13 @@ Raber, G.~T. and Schill, S.~R. (2019).
   (usv) for mapping and monitoring coral reefs.
 \newblock {\em Drones}, 3(2):38.
 
-\bibitem[Ravi et~al., 2024]{ravi2024sam2}
+\bibitem[Ravi et~al., 2025]{ravi2024sam2}
 Ravi, N., Gabeur, V., Hu, Y.-T., Hu, R., Ryali, C., Ma, T., Khedr, H.,
   R{\"a}dle, R., Rolland, C., Gustafson, L., Mintun, E., Pan, J., Alwala,
   K.~V., Carion, N., Wu, C.-Y., Girshick, R., Doll{\'a}r, P., and
-  Feichtenhofer, C. (2024).
-\newblock {SAM 2}: Segment anything in images and videos.
-\newblock {\em arXiv preprint arXiv:2408.00714}.
+  Feichtenhofer, C. (2025).
+\newblock {SAM} 2: Segment anything in images and videos.
+\newblock In {\em International Conference on Learning Representations (ICLR)}.
 
 \bibitem[Reaka-Kudla, 1997]{reakakudla1997}
 Reaka-Kudla, M.~L. (1997).
@@ -234,17 +256,33 @@ Roboflow (2020).
 \newblock \url{https://roboflow.com}.
 \newblock Accessed: 2025-07-28.
 
+\bibitem[Rowell et~al., 2025]{rowell2025}
+Rowell, D.~A., Hammerman, N.~M., Golding, K.~M., Kenyon, T.~M., Meziere, Z.,
+  Morgans, C., Brown, K.~T., Diederiks, F.~F., et~al. (2025).
+\newblock Multi-scale observations during the 2024 mass coral bleaching event
+  on {Heron Reef}, {Australia}.
+\newblock {\em Marine Biology}, 173:17.
+
+\bibitem[Shao et~al., 2026]{shao2025multilabel}
+Shao, X., Chen, H., Zhao, F., Magson, K., Chen, J., Li, P., Wang, J., and
+  Sasaki, J. (2026).
+\newblock Multi-label classification for multi-temporal, multi-spatial coral
+  reef condition monitoring using vision foundation model with adapter
+  learning.
+\newblock {\em Marine Pollution Bulletin}, 223:119054.
+
 \bibitem[Sing~Wong et~al., 2022]{sing2022}
 Sing~Wong, A., Vrontos, S., and Taylor, M.~L. (2022).
 \newblock An assessment of people living by coral reefs over space and time.
 \newblock {\em Global Change Biology}, 28(23):7139--7153.
 
-\bibitem[Spady et~al., 2025]{spady2025}
-Spady, B., Skirving, W., De~La~Cour, J., Geiger, E., Liu, G., Hoegh-Guldberg,
-  O., Norrie, A., Heron, S., Pomeroy, M., Kolodziej, G., and Manzello, D.
-  (2025).
-\newblock The 4th global coral bleaching event: Unprecedented, unbounded,
-  unrelenting.
+\bibitem[Spady et~al., 2026]{spady2025}
+Spady, B.~L., Skirving, W.~J., De~La~Cour, J.~L., Geiger, E.~F., Liu, G.,
+  Hoegh-Guldberg, O., Norrie, A., Heron, S.~F., Pomeroy, M.~W., Kolodziej, G.,
+  Brown, K.~T., and Manzello, D.~P. (2026).
+\newblock The 4th global coral bleaching event: ushering in an era of
+  near-annual bleaching.
+\newblock {\em Coral Reefs}.
 
 \bibitem[Strain et~al., 2019]{strain2019}
 Strain, E.~M., Edgar, G.~J., Ceccarelli, D., Stuart-Smith, R.~D., Hosack,
@@ -260,6 +298,14 @@ Vega~Thurber, R.~L., Silva, D., Speare, L., Croquer, A., Veglia, A.~J.,
   innovations for increasing resistance and resilience.
 \newblock {\em Annual Review of Marine Science}, 17(1):227--255.
 
+\bibitem[Wang et~al., 2026]{wang2026multiscale}
+Wang, J., Shao, X., Ma, B., Zhao, F., Magson, K., Sasaki, J., and Mizuno, K.
+  (2026).
+\newblock Multi-scale approach for coral condition assessment and {Drupella}
+  sp. identification using a versatile low-cost camera system and point cloud
+  semantic segmentation.
+\newblock {\em Marine Pollution Bulletin}, 224:119072.
+
 \bibitem[Wang et~al., 2016]{wang2016cnn}
 Wang, J., Yang, Y., Mao, J., Huang, Z., Huang, C., and Xu, W. (2016).
 \newblock Cnn-rnn: A unified framework for multi-label image classification.
@@ -268,8 +314,23 @@ Wang, J., Yang, Y., Mao, J., Huang, Z., Huang, C., and Xu, W. (2016).
 \bibitem[Wehrmann et~al., 2018]{wehrmann2018hierarchical}
 Wehrmann, J., Cerri, R., and Barros, R. (2018).
 \newblock Hierarchical multi-label classification networks.
-\newblock In {\em International conference on machine learning}, pages
-  5225--5234. PMLR.
+\newblock In {\em International conference on machine learning}, volume~80,
+  pages 5075--5084. PMLR.
+
+\bibitem[{Wildlife Conservation Society}, 2026]{mermaid2026}
+{Wildlife Conservation Society} (2026).
+\newblock {MERMAID}: Marine ecological research management aid.
+\newblock \url{https://datamermaid.org/}.
+\newblock Accessed: 2026-09-03.
+
+\bibitem[Winston et~al., 2022]{winston2022}
+Winston, M., Oliver, T., Couch, C., Donovan, M.~K., Asner, G.~P., Conklin, E.,
+  Fuller, K., Grady, B.~W., Huntington, B., Kageyama, K., Kindinger, T.~L.,
+  Kozar, K., Kramer, L., Martinez, T., McCutcheon, A., McKenna, S., Rodgers,
+  K., Shayler, C.~K., Vargas-Angel, B., and Zgliczynski, B. (2022).
+\newblock Coral taxonomy and local stressors drive bleaching prevalence across
+  the {Hawaiian Archipelago} in 2019.
+\newblock {\em PLOS ONE}, 17(9):e0269068.
 
 \bibitem[Wolpert, 1992]{wolpert1992stacked}
 Wolpert, D.~H. (1992).
@@ -294,6 +355,22 @@ Zhang, H., Li, M., Zhong, J., and Qin, J. (2024).
   on deep learning.
 \newblock In {\em 2024 {IEEE/CVF} Winter Conference on Applications of Computer
   Vision Workshops ({WACVW})}, pages 767--775. IEEE.
+
+\bibitem[Zhao et~al., 2024]{zhao2024rblyolo}
+Zhao, F., Liu, Y., Wang, J., Chen, Y., Xi, D., Shao, X., Tabeta, S., and
+  Mizuno, K. (2024).
+\newblock Riverbed litter monitoring using consumer-grade aerial-aquatic speedy
+  scanner ({AASS}) and deep learning based super-resolution reconstruction and
+  detection network.
+\newblock {\em Marine Pollution Bulletin}, 209:117030.
+
+\bibitem[Zhao et~al., 2025]{zhao2025musselyolo}
+Zhao, F., Xu, D., Ren, Z., Shao, X., Wu, Q., Liu, Y., Wang, J., Song, J., Chen,
+  Y., Zhang, G., Fujimoto, Y., Shimada, T., and Mizuno, K. (2025).
+\newblock Mamba-based super-resolution and semi-supervised {YOLOv10} for
+  freshwater mussel detection using acoustic video camera: A case study at
+  {Lake Izunuma}, {Japan}.
+\newblock {\em Ecological Informatics}, 90:103324.
 
 \bibitem[Zheng et~al., 2024]{zheng2024}
 Zheng, Z., Liang, H., Hua, B.-S., Wong, Y.~H., Ang, P., Chui, A. P.~Y., and
