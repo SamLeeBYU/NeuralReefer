@@ -1,33 +1,44 @@
 \documentclass[11pt]{elsarticle}
 
+% ---------- Core layout & fonts ----------
 \usepackage[margin=1in]{geometry}
 \usepackage{setspace}
 \usepackage{graphicx}
 \usepackage{adjustbox}
 
+% ---------- Math ----------
 \usepackage{amsmath, amssymb, amsfonts}
 \usepackage{bm, bbm}
 
+% ---------- Theorems ----------
 \usepackage{amsthm}
 \newtheorem{theorem}{Theorem}[section]
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{corollary}[theorem]{Corollary}
 \newtheorem{proposition}[theorem]{Proposition}
 
+% ---------- Tables ----------
 \usepackage{booktabs}
 \usepackage{threeparttable}
 \usepackage{tabularx}
 \usepackage{multirow}
 
+% ---------- Figures & captions ----------
 \usepackage{subcaption}
 \usepackage{caption}
 \captionsetup{labelfont=bf, font=small}
 
+% ---------- Lists, floats ----------
 \usepackage{enumitem}
 \setlist{nosep}
 \usepackage{float}
-\usepackage{rotating}
+\usepackage{rotating} % sidewaysfigure for Figures 4-5 (Reviewer 2, comment 7: too dense at normal page width)
 
+% ---------- Authorship & refs ----------
+%\usepackage{authblk}
+%\usepackage[numbers,sort&compress]{natbib}
+
+% ---------- TikZ / Graphics ----------
 \usepackage{tikz}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
@@ -40,6 +51,7 @@
   backgrounds
 }
 
+% --- TikZ styles ---
 \tikzset{
   yellowbox/.style={
     rectangle, rounded corners,
@@ -75,8 +87,17 @@
   arrow/.style={thick, ->, >=stealth}
 }
 
+\usepackage{xcolor}
+
+% ---------- Homogenized table width: measure the widest table (SAM2 tuned
+% parameters, Table 2) once, then size every other table's tabular* to that SAME natural width
+% (via @{\extracolsep{\fill}}, so their columns stretch/pad out to match) before each
+% is independently \resizebox{\linewidth}{!}{...}'d for display---since every table
+% starts from the same pre-resize width and is resized by the same target width, they
+% all end up at the identical final scale/font size. ----------
 \newsavebox{\perftablebox}
 
+% ---------- Hyperlinks ----------
 \usepackage[hidelinks]{hyperref}
 \hypersetup{
   pdftitle={},
@@ -117,8 +138,9 @@
   country={USA}
 }
 \begin{abstract}
-Regular and systematic monitoring of coral reef habitat is an essential tool in reef management, conservation and restoration. However, traditional monitoring techniques, which involve manual collection and analysis of imagery, are spatially limited and labor-intensive. Consequently, few coral reef ecosystems are regularly and comprehensively surveyed, and most existing records suffer spatial and temporal gaps that can skew interpretation of variability and trends. Advances in marine robotics and more recently, in computer vision, offer scalable alternatives by reducing demand on human practitioners. Here, we present a modular machine learning pipeline for large-scale segmentation and classification of reef imagery, demonstrated on a case study of top-down images collected by an unmanned surface vehicle (USV) in Majuro, Marshall Islands during an active bleaching event in October 2024. We show for the first time how semantic segmentation of underwater survey imagery can be used to measure both live and bleached coral cover for different coral taxonomic groups. The approach integrates the Segment Anything Model~2 for mask proposal generation with a merging procedure tuned to balance recall and precision across coral size scales, followed by convolutional neural networks (CNNs) that filter out non-coral instances and classify coral morpho-taxonomic class and bleaching status. On the held-out test set of 111 images, the full pipeline attains a live coral cover Intersection-over-Union of 0.674 and Dice coefficient of 0.781 against expert ground truth, outperforming a competing coral segmentation framework, CoralSCOP, on the same images. At the mask level, once a candidate mask has been proposed, the classification ensemble attains 90.3\% accuracy, 94.6\% recall, and 93.0\% precision on an out-of-sample coral morpho-taxonomic and bleaching-status classification. These results demonstrate the feasibility of automated coral health assessment on real-world survey data, enabling large-scale monitoring of reefs during bleaching events to study drivers of coral resilience to heat stress.
+Regular and systematic monitoring of coral reef habitat is an essential tool in reef management, conservation, and restoration. However, traditional monitoring techniques, which involve manual collection and analysis of imagery, are spatially limited and labor-intensive. Consequently, few coral reef ecosystems are regularly and comprehensively surveyed, and most existing records suffer spatial and temporal gaps that can skew interpretation of variability and trends. Advances in marine robotics and computer vision offer scalable alternatives by reducing demand on human practitioners. Here, we present a modular machine learning pipeline for large-scale segmentation and classification of reef imagery, demonstrated on a case study of top-down images collected by an unmanned surface vehicle (USV) in Majuro, Marshall Islands during an active bleaching event in October 2024. This unique dataset allows for semantic segmentation of underwater survey imagery that can be used to measure both live and bleached coral cover for different coral taxonomic groups. The approach integrates the Segment Anything Model~2 for mask proposal generation with a merging procedure tuned to balance recall and precision across coral size scales, followed by convolutional neural networks (CNNs) that filter out non-coral instances and classify coral morpho-taxonomic class and bleaching status. On the held-out test set of images, the full pipeline attains a live coral cover Intersection-over-Union of 0.674 and Dice coefficient of 0.781 against expert ground truth, outperforming a baseline coral segmentation framework, CoralSCOP, on the same images. At the mask level, once a candidate mask has been proposed, the classification ensemble attains 90.3\% accuracy, 94.6\% recall, and 93.0\% precision on an out-of-sample coral morpho-taxonomic and bleaching-status classification. These results demonstrate the feasibility of automated coral health assessment on real-world survey data, enabling large-scale monitoring of reefs during bleaching events to study drivers of coral resilience to heat stress.
 \end{abstract}
+
 
 \begin{keyword}
 Coral reefs \sep Machine vision \sep Ecological monitoring \sep Semantic segmentation
@@ -126,36 +148,52 @@ Coral reefs \sep Machine vision \sep Ecological monitoring \sep Semantic segment
 
 \end{frontmatter}
 
+% Built here (before its own textual placement) so every other table's tabular*
+% can reference \wd\perftablebox for a shared, homogenized column width. This is
+% Table 2's content (the widest of the five, confirmed by direct measurement --
+% re-check with a width probe if any table's content changes materially, since
+% the widest table can change). Table 2 itself is later displayed via
+% \resizebox{\linewidth}{!}{\usebox{\perftablebox}} at its normal location.
+% Content here must stay IDENTICAL to Table 2 below.
 \sbox{\perftablebox}{%
-\begin{tabular}{lrr rr rr rr}
+\begin{tabular}{ll@{\hspace{4pt}}r@{\hspace{4pt}}r}
 \toprule
-\textbf{Class} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
+\textbf{Parameter} & \textbf{Description} & \textbf{Large} & \textbf{Small} \\
 \midrule
-Live Coral Cover (all coral) & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
-Bleached (any genus)         & 0.350 & (0.033) & 0.427 & (0.034) & 0.635 & (0.037) & 0.395 & (0.037) \\
+\multicolumn{4}{l}{\textit{Segmentation Parameters}} \\
+\texttt{points\_per\_side} & Grid resolution for prompt points & 4 & 21 \\
+\texttt{points\_per\_batch} & Prompt points per batch & 36 & 64 \\
+\texttt{pred\_iou\_thresh} & Minimum predicted IoU for mask retention & 0.3301 & 0.3275 \\
+\texttt{stability\_score\_thresh} & Threshold on SAM2 stability score & 0.1785 & 0.4271 \\
+\texttt{stability\_score\_offset} & Offset added to stability score & 0.9626 & 0.9404 \\
+\texttt{crop\_n\_layers} & Number of pyramid crop layers & 0 & 0 \\
+\texttt{box\_nms\_thresh} & IoU threshold for NMS suppression & 0.4803 & 0.4677 \\
+\texttt{crop\_n\_points\_downscale\_factor} & Crop grid downscale factor & 1 & 1 \\
+\texttt{min\_mask\_region\_area} & Minimum mask area (pixels) & 10{,}000 & 400 \\
 \midrule
-Branching Acropora & 0.728 & (0.038) & 0.752 & (0.038) & 0.752 & (0.062) & 0.501 & (0.063) \\
-Finger Acropora    & 0.619 & (0.031) & 0.702 & (0.030) & 0.794 & (0.024) & 0.679 & (0.034) \\
-Finger Porites     & 0.674 & (0.041) & 0.698 & (0.040) & 0.511 & (0.065) & 0.475 & (0.063) \\
-Knob Porites       & 0.720 & (0.037) & 0.754 & (0.035) & 0.623 & (0.060) & 0.500 & (0.058) \\
-Mounding           & 0.452 & (0.040) & 0.501 & (0.040) & 0.484 & (0.051) & 0.320 & (0.040) \\
-Oddball            & 0.473 & (0.047) & 0.475 & (0.047) & 0.050 & (0.034) & 0.057 & (0.035) \\
-Pocillopora        & 0.673 & (0.040) & 0.702 & (0.039) & 0.564 & (0.063) & 0.542 & (0.062) \\
-Table Acropora     & 0.622 & (0.043) & 0.642 & (0.043) & 0.360 & (0.064) & 0.431 & (0.070) \\
+\multicolumn{2}{l}{\textit{Postprocessing and Augmentation Parameters}} & & \\
+\texttt{overlap} & Max allowed mask overlap during merging & 0.0280 & \\
+\texttt{solidarity} & Inter-mask consistency weighting & 0.7148 & \\
+\texttt{clipLimit} & CLAHE contrast enhancement limit & 9 & \\
+\texttt{tileGridSize} & Grid size for CLAHE transformation & 8 & \\
+\texttt{redBoost} & Red channel intensity multiplier & 1.2718 & \\
+\texttt{whiteBalance} & Apply white balance correction & \texttt{True} & \\
+\texttt{gamma} & Gamma correction for normalization & 0.7780 & \\
 \bottomrule
 \end{tabular}%
 }
 
 \section{Introduction}
-One of the key challenges faced by stakeholders attempting to mitigate the rapid loss of coral reef ecosystems is the ability to efficiently monitor reefs, collect coral census data, and track the severity and extent of bleaching events. Coral reefs represent the most biodiverse ecosystems in our oceans---despite covering less than 1\% of the seafloor, they are home to over 25\% of all marine species \citep{reakakudla1997}. They provide ecosystem services valued upwards of trillions of dollars through fisheries, tourism, and coastal protection, and directly support the livelihoods of billions of people across the globe \citep{costanza2014,sing2022}. However, these invaluable communities are in the midst of an existential crisis. A majority of reefs are faced with local stressors like overfishing and land-based sources of pollution, many regions have been impacted by large-scale outbreaks of disease, and corals all over the world are reeling from the global scale threat of coral bleaching in response to climate change \citep{burke2011reefs,vega2025, hughes2017}. The mass bleaching of 2024 was the Fourth Global Mass Bleaching Event, affecting 84\% of all reefs on earth, and mortality in many areas approaching 100\% \cite{spady2025,birkart2025}. Coral reef stakeholders---a title that applies to the 13\% of the planet's population who live near coral reefs---have deployed a wide range of local interventions to attempt to address these threats, from the establishment of MPA networks, active coral restoration efforts, the identification and cultivation of thermally tolerant corals, and more \citep{strain2019, bostrom2020}. But collecting data to guide the implementation of these tools and quantify their long-term success is difficult. The scarcity of high-resolution, long-term, and spatially extensive data on patterns of coral bleaching has been a limitation to advancing our understanding of both the interaction of heat stress intensity and duration that causes coral bleaching and of environmental conditions that may promote a reef's resilience to heat stress.
+One of the key challenges faced by stakeholders attempting to mitigate the rapid loss of coral reef ecosystems is the ability to efficiently monitor reefs, collect coral census data, and track the severity and extent of bleaching events. Coral reefs represent the most biodiverse ecosystems in our oceans---despite covering less than 1\% of the seafloor, they are home to over 25\% of all marine species \citep{reakakudla1997}. They provide ecosystem services valued upwards of trillions of dollars through fisheries, tourism, and coastal protection, and directly support the livelihoods of billions of people across the globe \citep{costanza2014,sing2022}. However, these invaluable communities are in crisis across the globe: a majority of reefs are faced with local stressors like overfishing and land-based sources of pollution, many regions have been impacted by large-scale outbreaks of disease, and corals all over the world are reeling from the global scale threat of coral bleaching in response to climate change \citep{burke2011reefs,vega2025, hughes2017}. The mass bleaching of 2024 was the Fourth Global Mass Bleaching Event, affecting 84\% of all reefs on earth, and mortality in many areas approaching 100\% \cite{spady2025,birkart2025}. Coral reef stakeholders---a title that applies to the 13\% of the planet's population who live near coral reefs---have deployed a wide range of local interventions to attempt to address these threats, from the establishment of MPA networks, active coral restoration efforts, the identification and cultivation of thermally tolerant corals, and more \citep{strain2019, bostrom2020}. But collecting data to guide the implementation of these tools and quantify their long-term success is difficult. While large monitoring efforts have been successful in capturing spatial patterns in coral bleaching \citep{winston2022,rowell2025}, the resource-intensity of these types of programs limits their transferability to coral reefs worldwide. This scarcity of high-resolution, long-term, and spatially extensive data on patterns of coral bleaching has been a limitation to advancing our understanding of both the interaction of heat stress intensity and duration that causes coral bleaching and of environmental conditions that may promote a reef's resilience to heat stress.
 
 By far the most commonly used method of monitoring coral reefs, including during bleaching, is diver-led transects/phototransects \citep{rivera2025}. These surveys are extremely time and resource intensive, precluding their application at entire-reef scale and greatly limiting the temporal resolution at which surveys can be repeated \citep{cresswell2021,mcdonald2010}. Aerial surveys and satellite imagery using visible wavelength and multispectral imaging have been used to estimate live coral cover and broadscale patterns of bleaching, but do not provide colony level identification and are limited to shallower reefs \citep{asner2022,ayad2025}. Robotics solutions such as autonomous underwater or surface vehicles can enable the collection of photo data of large areas of reef at high speeds \citep{raber2019}, but analyzing collected photos still requires a significant amount of time from trained experts \citep{josephitis2012}. Recent advances in machine learning technology can allow for rapid, AI-driven analysis of these photos to produce relevant coral reef health metrics such as coral cover, species distribution, and bleaching status.
 
 Here, we present a modular machine vision pipeline for segmentation and classification of coral reef imagery. The approach uses the Segment Anything Model 2 (SAM2) \citep{ravi2024sam2} foundation model to propose masks for an entire image and applies an ensemble of convolutional neural networks (CNNs) to filter out non-coral instances, classify coral taxa, and assign bleaching status.
 
+
 \section{Related Work}
 
-As machine learning techniques for image analysis have advanced, several different approaches have been applied to the task of classification of underwater coral reef imagery. Beijbom used a support vector machine model (SVM) to classify sampled points within an image, with prediction accuracy reaching 70-80\% \citep{beijbom2012}. This approach, made publicly available in the online tool CoralNet, essentially automated commonly used random or stratified point sampling methods (e.g. Coral Point Count \citep{kohlergill2006}), which can provide statistical estimates of coral cover, but do not allow for colony-level metrics that the direct area measurements of full image segmentation provides. Training of semantic segmentation models, however, requires large amounts of densely labeled data. Alonso et al. \citep{alonso2017,alonso2019} used a superpixel segmentation algorithm to augment the sparsely annotated labels generated by Coral Point Count and CoralNet into densely labeled images that can be used in training of CNN-based semantic segmentation models, and King et al. \citep{king2018} demonstrated the strength of fully convolutional neural networks for semantic segmentation of underwater coral reef imagery. Several recent studies have implemented CNNs and FCNNs for underwater coral reef imagery segmentation, with varying numbers of semantic classes, ranging from binary coral/noncoral or live/dead coral classes \citep{zhang2022, kopecky2023}, to classes for dominant coral genera and growth forms  \citep{zhang2024, li2024, lawson2025, zheng2025}, and training on photos collected during video and phototransect surveys and from online repositories. Macrohon and Hung applied a CNN to classify coral photos taken from various angles retrieved from the photosharing site Flickr, and reported 88\% accuracy on picture-wise classifications of bleached vs. healthy \citep{macrohonhung2025}. Zheng et al. \citep{zheng2024} present CoralSCOP, which uses the Segment Anything Model \citep{kirillov2023segment} to generate masks and a parallel semantic branch to assign labels that can be defined by the user with additional training data. Here, we present 1) a novel pipeline that uses a similar parallel segmentation-labelling approach, combining Segment Anything 2 to generate masks with an ensemble of CNN submodels to assign mask labels and 2) the first application of a semantic segmentation approach to automate classification of colony scale bleaching from underwater coral reef imagery, with 8 morpho-taxonomic classes, each further split into separate bleaching classes.
+As machine learning techniques for image analysis have advanced, several different approaches have been applied to the task of classification of underwater coral reef imagery. Beijbom et al. used a support vector machine model (SVM) to classify sampled points within an image, with prediction accuracy reaching 70-80\% \citep{beijbom2012}. This approach, made publicly available in the online tool CoralNet, essentially automated commonly used random or stratified point sampling methods (e.g. Coral Point Count \citep{kohlergill2006}). Platforms such as ReefCloud and MERMAID similarly apply CNNs to point-annotated reef imagery for scalable benthic cover estimation, and provide helpful GUIs that aim to bring these models into the operations of users around the world \citep{gonzalezrivero2020,mermaid2026}. Point-based approaches efficiently estimate percent cover, but cannot recover colony-level size, shape, or per-colony bleaching status that full semantic segmentation provides. Training of semantic segmentation models, however, requires large amounts of densely labeled data. Alonso et al. \citep{alonso2017,alonso2019} used a superpixel segmentation algorithm to augment the sparsely annotated labels generated by Coral Point Count and CoralNet into densely labeled images that can be used in training of CNN-based semantic segmentation models, and King et al. \citep{king2018} demonstrated the strength of fully convolutional neural networks for semantic segmentation of underwater coral reef imagery. Several recent studies have implemented CNNs and FCNNs for underwater coral reef imagery segmentation, with varying numbers of semantic classes, ranging from binary coral/noncoral or live/dead coral classes \citep{zhang2022, kopecky2023, wang2026multiscale}, to classes for dominant coral genera and growth forms  \citep{zhang2024, li2024, lawson2025, zheng2025}, and training on photos collected during video and phototransect surveys and from online repositories. Image-level classification methods have also been explored for coral health monitoring: Macrohon and Hung applied a CNN to classify coral photos taken from various angles retrieved from the photosharing site Flickr, and reported 88\% accuracy on picture-wise classifications of bleached vs. healthy \citep{macrohonhung2025}, and Shao et al.\ \citep{shao2025multilabel} fine-tuned a DINOv2 vision foundation model for detecting coral health status from close-up images of corals taken during phototransects. Object detection models, such as YOLO models, have been applied to a number of marine applications (e.g., \citep{zhao2024rblyolo, zhao2025musselyolo}). Zheng et al. \citep{zheng2024} present CoralSCOP, which uses the Segment Anything Model \citep{kirillov2023segment} to generate masks and a parallel semantic branch to assign labels that can be defined by the user with additional training data. Here, we present 1) a novel pipeline that uses a similar parallel segmentation-labelling approach, combining Segment Anything~2 \citep{ravi2024sam2} to generate masks with an ensemble of CNN submodels to assign mask labels and 2) an application of semantic segmentation to automate classification of colony scale bleaching from underwater coral reef imagery, with 8 morpho-taxonomic classes, each further split into separate bleaching classes.
 
 \section{Methods}
 \subsection{Data}
@@ -197,9 +235,9 @@ Majuro's exceptional diversity presents distinct challenges for image-based clas
 \label{fig:raw-yellowfin-examples}
 \end{figure}
 
-Yellowfin images from Majuro were uploaded to the online computer vision platform Roboflow \citep{roboflow2020} for what is referred to as `ground-truth' annotation. Coral experts in the Cohen Laboratory at WHOI manually outlined individual colonies with polygonal masks, assisted by automated mask proposals generated by the Segment Anything Model 2 (SAM2) \citep{ravi2024sam2}. Annotators refined and corrected these proposals to ensure accuracy. At the species level, up to 82 distinct labels were identified, reflective of the high biodiversity of the Majuro reef system. Over the course of two months, WHOI's annotation team hand-annotated 552 images for a total of 14,275 individual masks.
+Yellowfin images from Majuro were uploaded to the online computer vision platform Roboflow \citep{roboflow2020} for what is referred to as `ground-truth' annotation. Coral experts in the Cohen Laboratory at WHOI outlined individual colonies with polygonal masks, using Roboflow's Smart Select tool, which leverages the Segment Anything Model~2 (SAM2) \citep{ravi2024sam2} to generate first-pass masks, which were then manually fine tuned to accurately outline the colonies. Each image's annotations were reviewed by a senior lab member to ensure accuracy, although inter-annotator agreement statistics were not collected. Annotators labeled corals to the highest degree of taxonomic resolution, and up to 82 distinct labels were identified, reflective of the high biodiversity of the Majuro reef system. Over the course of two months, WHOI's annotation team hand-annotated 552 images for a total of 14,275 individual masks.
 
-To prepare the data for machine learning, the raw annotations were consolidated into what the annotation team identified as eight suitable morpho-taxonomic classes: \emph{Branching Acropora}, \emph{Finger Acropora}, \emph{Finger Porites}, \emph{Knob Porites}, \emph{Mounding}, \emph{Pocillopora}, \emph{Table Acropora}, and an ``Oddball'' category for grouping uncommon morphologies. Each morpho-taxonomic class was further cross-classified by bleaching status (healthy or bleached). A separate `non-coral' class was also defined to capture negative examples such as sand, rubble, algae, or spurious segmentations. The `non-coral' class contains no hand-annotated masks at all: annotators were instructed only to outline live coral colonies, not to draw negative examples, so every `non-coral' training instance is instead synthetically constructed from SAM2 mask proposals with low overlap to any annotated coral colony (Section~\ref{sec:cnn}). The consolidation to seventeen classes reduced the parameter space for model training while preserving interpretability at the morpho-taxonomic level for reef monitoring.
+To prepare the data for machine learning, the raw annotations were consolidated into what the annotation team identified as eight suitable morpho-taxonomic classes: \emph{Branching Acropora}, \emph{Finger Acropora}, \emph{Finger Porites}, \emph{Knob Porites}, \emph{Mounding}, \emph{Pocillopora}, \emph{Table Acropora}, and an ``Oddball'' category for grouping uncommon morphologies. Each morpho-taxonomic class was further cross-classified by bleaching status (healthy or bleached). A separate `non-coral' class was also defined to capture negative examples such as sand, rubble, algae, or spurious segmentations. The `non-coral' class contains no hand-annotated masks at all: annotators were instructed only to outline live coral colonies, not to draw negative examples, so every `non-coral' training instance is instead synthetically constructed from SAM2 mask proposals with low overlap to any annotated coral colony (Section~\ref{sec:cnn}). The consolidation to seventeen classes reduced the parameter space for model training while preserving interpretability at the morpho-taxonomic level for reef monitoring. Collapsing the data into these classes does introduce the possibility of drowning out variations in abundance and bleaching rates among species within a class, but these decisions were constrained by the taxonomic granularity to which coral could be confidently identified by annotators and the scarcity of certain classes. Despite this, morphological class often remains a useful proxy for ecological function.
 
 Annotated images were divided into training (441 images) and test (111 images) sets. Masks were exported in COCO JSON format and programmatically converted into pixel-level binary masks with associated morpho-taxonomic and bleaching labels for downstream machine learning tasks.
 
@@ -283,8 +321,13 @@ The framework operates in four main stages. First, instance segmentation is perf
 
 An overview of the full workflow of the inference pipeline is shown in Figure~\ref{fig:pipeline}, while the training pipeline is discussed in the following section.
 
+% Revision: converted from \begin{figure}[!ht] to sidewaysfigure, on its own
+% landscape page (Reviewer 2, comment 7---Figure 4 was too dense/small at
+% normal page width; rotating it 90 degrees onto its own page maximizes
+% available space). Table captions elsewhere in the document are unaffected.
 \begin{sidewaysfigure}[p]
     \centering
+    % \resizebox{<width>}{<height>}{<content>}
     \resizebox{0.9\textheight}{!}{%
         \input{model}
     }
@@ -295,7 +338,7 @@ An overview of the full workflow of the inference pipeline is shown in Figure~\r
 \subsubsection{SAM2-Based Segmentation}
 \label{sec:sam2}
 
-The first stage of the proposed machine vision pipeline involves instance segmentation with SAM2, a foundation model developed by Meta AI for promptable image segmentation based on a Vision Transformer (ViT) encoder-decoder architecture. Given the heterogeneity of coral structures across size scales and the variance across Yellowfin images, we adopt a two-stream configuration of SAM2, tuned conjointly to capture both large and small coral colonies. A single, jointly-tuned SAM2 configuration, was initially explored, but found it could not simultaneously serve both size regimes well: hyperparameters tuned to reliably fragment and recover many small colonies (e.g.\ a dense prompt grid, permissive stability thresholds) over-propose small, spurious masks in scenes dominated by one or two large colonies, while hyperparameters tuned for conservative, high-precision large-colony masks miss small or fragmented colonies entirely. Since a single Majuro image can contain either regime (or both), no single configuration's optimum served both well, motivating two separately-tuned configurations reconciled downstream by mask consolidation. Each image is passed through both configurations in parallel, generating potentially overlapping sets of candidate mask proposals that are later reconciled through a mask consolidation algorithm.
+The first stage of the proposed machine vision pipeline involves instance segmentation with SAM2, a foundation model developed by Meta AI for promptable image segmentation based on a Vision Transformer (ViT) encoder-decoder architecture. Given the heterogeneity of coral structures across size scales and the variance across Yellowfin images, we adopt a two-stream configuration of SAM2, tuned conjointly to capture both large and small coral colonies. A single, jointly-tuned SAM2 configuration, was initially explored, but found it could not simultaneously serve both size regimes well: hyperparameters tuned to reliably fragment and recover many small colonies (e.g.\ a dense prompt grid, permissive stability thresholds) over-propose small, spurious masks in scenes dominated by one or two large colonies, while hyperparameters tuned for conservative, high-precision large-colony masks miss small or fragmented colonies entirely. Since a single image can contain either regime (or both), no single configuration's optimum served both well, motivating two separately-tuned configurations reconciled downstream by mask consolidation. Each image is passed through both configurations in parallel, generating potentially overlapping sets of candidate mask proposals that are later reconciled through a mask consolidation algorithm.
 
 SAM2 accepts a dense grid of spatial prompts, internally transformed into learned embeddings through a transformer encoder. These prompt embeddings are fused with high-resolution image features extracted from a pre-trained ViT-H backbone, producing a set of segmentation masks with associated confidence scores. To control mask density and granularity, we vary key hyperparameters such as the number of prompt points per side, the stability score threshold, and the predicted intersection-over-union (IoU).
 
@@ -307,33 +350,7 @@ To tailor the SAM2-based segmentation module for detecting coral colonies across
 \centering
 \caption{Tuned parameters for SAM2 segmentation and preprocessing augmentations. Segmentation parameters are tuned separately for large and small object detection, while postprocessing and augmentation parameters are shared.}
 \label{tab:sam2-tuned-params}
-\resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} ll@{\hspace{4pt}}r@{\hspace{4pt}}r}
-\toprule
-\textbf{Parameter} & \textbf{Description} & \textbf{Large} & \textbf{Small} \\
-\midrule
-\multicolumn{4}{l}{\textit{Segmentation Parameters}} \\
-\texttt{points\_per\_side} & Grid resolution for prompt points & 4 & 21 \\
-\texttt{points\_per\_batch} & Prompt points per batch & 36 & 64 \\
-\texttt{pred\_iou\_thresh} & Minimum predicted IoU for mask retention & 0.3301 & 0.3275 \\
-\texttt{stability\_score\_thresh} & Threshold on SAM2 stability score & 0.1785 & 0.4271 \\
-\texttt{stability\_score\_offset} & Offset added to stability score & 0.9626 & 0.9404 \\
-\texttt{crop\_n\_layers} & Number of pyramid crop layers & 0 & 0 \\
-\texttt{box\_nms\_thresh} & IoU threshold for NMS suppression & 0.4803 & 0.4677 \\
-\texttt{crop\_n\_points\_downscale\_factor} & Crop grid downscale factor & 1 & 1 \\
-\texttt{min\_mask\_region\_area} & Minimum mask area (pixels) & 10{,}000 & 400 \\
-\midrule
-\multicolumn{2}{l}{\textit{Postprocessing and Augmentation Parameters}} & & \\
-\texttt{overlap} & Max allowed mask overlap during merging & 0.0280 & \\
-\texttt{solidarity} & Inter-mask consistency weighting & 0.7148 & \\
-\texttt{clipLimit} & CLAHE contrast enhancement limit & 9 & \\
-\texttt{tileGridSize} & Grid size for CLAHE transformation & 8 & \\
-\texttt{redBoost} & Red channel intensity multiplier & 1.2718 & \\
-\texttt{whiteBalance} & Apply white balance correction & \texttt{True} & \\
-\texttt{gamma} & Gamma correction for normalization & 0.7780 & \\
-\bottomrule
-\end{tabular*}%
-}
+\resizebox{\linewidth}{!}{\usebox{\perftablebox}}
 \begin{tablenotes}
 \item \emph{Notes: ``Large'' and ``Small'' denote the two SAM2 mask-proposal configurations tuned separately for large and small coral structures (Section~\ref{sec:sam2}), not distinct model sizes. Postprocessing and augmentation parameters are shared between the two configurations and are reported once, under the Large column.}
 \end{tablenotes}
@@ -342,7 +359,7 @@ To tailor the SAM2-based segmentation module for detecting coral colonies across
  Formally, $\Theta_\text{SAM}$ denotes the SAM2 hyperparameter space, and $\Theta_\text{aug}$ denote the space of augmentation parameters used during preprocessing of the image used for segmentation. The full parameter space is thus defined as $\Theta = \Theta_\text{SAM}^2 \times \Theta_\text{aug}$, where $\Theta_\text{SAM}^2$ indicates the parameter spaces for both the large mask proposal and small mask proposal generation methods, respectively. Each configuration $\theta \in \Theta$ is a tuple consisting of both model-level and image-level parameters. We give a brief description of each tunable parameter in Table~\ref{tab:sam2-tuned-params}.
 
 To evaluate candidate configurations $\theta \in \Theta$, we construct a representative validation set $\mathcal{I}$, consisting of a fixed number of images sampled with stratified Monte Carlo sampling for each proposed $\theta$, as follows. Each image $i \in \mathcal{I}$ is assigned to a stratum according to its number of ground truth coral annotations, and sample counts per stratum are allocated proportionally to stratum size to ensure broad coverage across annotation densities (and thus, coverage across the distribution of coral cover). For our purposes, we used the empirical quintiles of the number of ground truth annotations to define the boundaries of each stratum.
-For a given configuration $\theta$, we compute the predicted set of masks for each image $i$, and evaluate performance with two image-level metrics defined at the pixel level: $\text{Accuracy}(\theta)$, the average proportion of correctly matched predicted pixels as either coral or non-coral, and $\text{Recall}(\theta)$, the fraction of ground truth live coral mask pixels that are covered by a predicted coral mask.
+For a given configuration $\theta$, we compute the predicted set of masks for each image $i$, and evaluate performance with two image-level metrics defined at the pixel level: $\text{Accuracy}(\theta)$, the average proportion of correctly matched predicted pixels as either coral or non-coral, and $\text{Recall}(\theta)$, the fraction of ground truth live coral mask pixels that are covered by a predicted coral mask. %\footnote{
 
 To prioritize sensitivity in mask discovery while retaining precision, we define a convex score function:
 \begin{equation}
@@ -365,8 +382,12 @@ Because this step operates only on already-classified coral masks, it yields the
 \subsubsection{Classification Model}
 \label{sec:cnn}
 
+% Revision: converted from \begin{figure}[!ht] to sidewaysfigure, on its own
+% landscape page (Reviewer 2, comment 7---Figure 5 was too dense/small at
+% normal page width).
 \begin{sidewaysfigure}[p]
     \centering
+    % \resizebox{<width>}{<height>}{<content>}
     \resizebox{0.9\textheight}{!}{%
         \input{training_model}
     }
@@ -376,13 +397,13 @@ Because this step operates only on already-classified coral masks, it yields the
 
 The proposed pipeline's second stage classifies each candidate mask into one of 17 classes. As described in the Methods, these classes were derived by consolidating our hand-coded segmentations, with each class representing a cross-product of morpho-taxonomic class (eight classes) and bleaching status (binary: bleached/not bleached). An additional ``non-coral'' class accounts for false positives in segmentation.
 
-To construct a balanced and representative classification dataset, we first extract positive instances from ground truth masks and assign labels by morpho-taxonomic class and bleaching status. Negative instances are synthetically generated using the tuned SAM2 segmentation module in the previous section, selecting predicted masks with low overlap to ground truth annotations. These synthetic ``non-coral'' examples capture natural false positives from texture or color that resemble coral but lack biological structure. The resulting dataset is represented as $\{(x_i, y_i)\}_{i=1}^N$, where $x_i \in \mathbb{R}^{C \times H \times W}$ denote a normalized image crop extracted around the proposed mask, where $C$ is the number of channels ($3$ for RGB), and $H = W = 128$ denote the height and width of the resized crop (a choice of resolution made to balance computational efficiency and feature information).
+To construct a balanced and representative classification dataset, we first extract positive instances from ground truth masks and assign labels by morpho-taxonomic class and bleaching status. Negative instances are synthetically generated using the tuned SAM2 segmentation module in the previous section, selecting predicted masks with low overlap to ground truth annotations. These synthetic ``non-coral'' examples capture natural false positives from texture or color that resemble coral but lack biological structure. As demonstrated by Zheng et al.\ \citep{zheng2024}, these negative training data are important in preventing oversegmentation of non-coral features. The resulting dataset is represented as $\{(x_i, y_i)\}_{i=1}^N$, where $x_i \in \mathbb{R}^{C \times H \times W}$ denote a normalized image crop extracted around the proposed mask, where $C$ is the number of channels ($3$ for RGB), and $H = W = 128$ denote the height and width of the resized crop (a choice of resolution made to balance computational efficiency and feature information).
 
 The associated label $y_i \in \{1, \ldots, K\}$ denotes the mutually exclusive class index. We adopt this scalar class-index convention for $y_i$ consistently for the remainder of this section, including the ensemble aggregation and Expectation-Maximization derivations in the appendix.
 
 To enhance model generalization and prevent overfitting to fixed visual patterns, we employ a data augmentation strategy parameterized by a surrogate distribution $\mathcal{A}$. This distribution is designed to emulate the natural variability inherent to mask crops produced by the SAM2 segmentation model. Specifically, each training image $x_i$ is transformed through a stochastic function $\phi \sim \mathcal{A}$, yielding an augmented crop $x_i' = \phi(x_i)$. The augmentation pipeline includes randomized geometric distortions (resized cropping, affine transformations, rotations, and flips). Importantly, $\phi$ is resampled at every epoch. This process induces a stochastic prior over the image space, and in expectation, approximates the distribution of all plausible augmented variants of each object. Such per-epoch resampling can be interpreted as injecting functional noise into the training procedure, thereby improving robustness to out-of-distribution samples and better regularizing the learned representations under covariate shift \citep{chapelle2001vicinal, zhang2018mixup, cubuk2019autoaugment}.
 
-Finally, to mitigate class imbalance and ensure adequate representation of minority categories, we oversample each class to a minimum of $1{,}000$ training examples. In our dataset, the rarest class in our dataset comprises only $13$ instances, and the threshold of $1,000$ may be adjusted depending on the size and diversity of the available training data. For classes with insufficient samples, we perform sampling with replacement, augmenting each duplicated crop using a new realization of the stochastic transformation $\phi(\cdot) \sim \mathcal{A}$. This procedure helps balance the empirical class distribution and ensures that each synthetic instance is drawn from a diverse augmentation prior, enabling the classifier to better learn class-discriminative features under our limited data regime. Each classifier is trained on a bootstrapped sample of the training data to reduce computational burden per model while introducing controlled variability across ensemble members. This sampling variability encourages decorrelation among base learners, which is crucial for reducing the generalization error of the ensemble through variance reduction. Moreover, since each classifier is trained on a slightly different empirical distribution, the ensemble can better approximate posterior uncertainty and hedge against overfitting to specific training artifacts. Optimization is performed using the Adam optimizer, which adapts learning rates per parameter and accelerates convergence in high-dimensional settings. Each classifier is optimized using the standard categorical cross-entropy (CCE) loss, encouraging discriminative learning while enabling each submodel to serve as a weak learner in the ensemble.  In our latest generation, the training dataset comprised $N=58{,}716$ mask crops derived from 411 annotated images. Of these, 38,608 were synthetically generated ``non-coral'' negatives, while minority classes were oversampled to a minimum of 1,000 instances each.
+Finally, to mitigate class imbalance and ensure adequate representation of minority categories, we oversample each class to a minimum of $1{,}000$ training examples. In our dataset, the rarest class in our dataset comprises only $13$ instances, and the threshold of $1,000$ may be adjusted depending on the size and diversity of the available training data. For classes with insufficient samples, we perform sampling with replacement, augmenting each duplicated crop using a new realization of the stochastic transformation $\phi(\cdot) \sim \mathcal{A}$. This procedure helps balance the empirical class distribution and ensures that each synthetic instance is drawn from a diverse augmentation prior, enabling the classifier to better learn class-discriminative features under our limited data regime. Each classifier is trained on a bootstrapped sample of the training data to reduce computational burden per model while introducing controlled variability across ensemble members. This sampling variability encourages decorrelation among base learners, which is crucial for reducing the generalization error of the ensemble through variance reduction. Moreover, since each classifier is trained on a slightly different empirical distribution, the ensemble can better approximate posterior uncertainty and hedge against overfitting to specific training artifacts. Optimization is performed using the Adam optimizer, which adapts learning rates per parameter and accelerates convergence in high-dimensional settings. Each classifier is optimized using the standard categorical cross-entropy (CCE) loss, encouraging discriminative learning while enabling each submodel to serve as a weak learner in the ensemble.  In our latest generation, the training dataset comprised $N=58{,}716$ mask crops derived from 411 annotated images. Of these, 38,608 were synthetically generated ``non-coral'' negatives, while minority classes were oversampled to a minimum of 1,000 instances each, a strategy shown to improve CNN performance under imbalanced label distributions \citep{buda2018}.
 
 To further enhance generalizability, robustness to sampling variability, and predictive power, we define an ensemble of classifiers within the classification stage of the proposed pipeline. We discuss the technical details of the ensemble aggregation in the next section. For each $m = 1, \ldots, M$, where $M$ denotes the number of models in the ensemble, the image crop $x_i$ is passed through a CNN classifier with a ResNet backbone \citep{he2016deep}. We adopt a modular architecture in which the final fully connected layer of the pre-trained ResNet is replaced with a four-layer multilayer perceptron head (MLP). This architecture is a standard transfer-learning convention, though an architecture search could be explored. The progressively narrowing MLP (512 $\to$ 256 $\to$ 128) comprises alternating layers of ReLU activations (used to model complex non-linear trends in the data) and dropout (used to reduce overfitting), terminating in a linear projection to a $K$-dimensional output space where $K = 17$ denotes the number of classes. Dropout regularization is progressively diminished across layers to mitigate co-adaptation, using rates of $0.7$, $0.6$, and $0.5$ respectively, serving as a common default for adapting a pre-trained backbone to a new classification target. A softmax activation is applied to the output logits for probabilistic interpretation. We did not observe our results to be sensitive to this choice. In particular, removing one of the four layers (or adjusting the intermediate widths) would not meaningfully change a single submodel's accuracy---the architecture's role here is simply to provide each ensemble member with adequate, well-regularized capacity, not to serve as a point of novelty. In practice, we used a configured ResNet model with 34 layers as a backbone because it strikes a favorable tradeoff between representational capacity and computational efficiency, providing sufficient depth to capture hierarchical texture and morphology cues in coral fragments without incurring the overfitting risks or computational burdens associated with deeper variants.
 
@@ -532,6 +553,10 @@ To estimate coral cover, we treat the union of all candidate masks classified as
 Analogously, ground truth coral cover is computed by taking the union of all \emph{annotated} live coral masks.
 To quantify the severity of bleaching, we compute the proportion of the area in an image that is classified as bleached: taking the subset of live coral masks predicted to be bleached, we calculate bleached coral cover as the percentage of pixels in each image covered by their union.
 
+\subsubsection{Comparison of Coral Cover Estimates with baseline model} \label{sec:coralscopcomparison}
+
+To assess the performance of the proposed pipeline, we compare the coral cover estimates with those of CoralSCOP, a semantic segmentation model for coral reef imagery that uses the Segment Anything Model \citep{kirillov2023segment} to generate coral masks, trained on a wide array of imagery. We used CoralSCOP-LAT \citep{wong2024coralscopelat} to run inference on all . IoU, Dice, precision, and recall were calculated against the groundtruth annotations.
+
 \section{Results}
 \label{sec:results}
 
@@ -623,6 +648,17 @@ Table Acropora     & 0.0000 & -0.0055 & -0.0055 (0.0074) & 0.0000 \\
 
 Coral taxa composition is well recovered overall, consistent with the per-taxonomic-class bias decomposition in Table~\ref{tab:bias-decomposition}. Figure~\ref{fig:lcc_train_test} and Table~\ref{tab:bias-decomposition} indicate that the proposed pipeline reproduces the overall distribution of coral cover and bleaching, with residual underestimation concentrated in dense, high-cover scenes where overlapping colonies complicate accurate classification. We discuss how researchers might attempt to mitigate this bias in the next section.
 
+% Figure commented out: the per-taxa stacked LCC density panels were
+% difficult to read at this size (Reviewer 2, comment 7). The same
+% information is now conveyed by the per-taxonomic-class bias decomposition
+% in Table~\ref{tab:bias-decomposition} instead.
+% \begin{figure}[htbp]
+%     \centering
+%     \includegraphics[width=1\linewidth]{fig13.png}
+%     \caption{Taxa-specific distributions of live coral cover per image, comparing ground truth (blue) and machine vision predictions (violet) for training (top) and held-out test (bottom) splits. Curves are kernel density estimates (estimated with a Gaussian kernel) of the fraction of image area occupied by each morpho-taxonomic class. Substantial overlap indicates that morpho-taxonomic class composition is largely recovered in and out of sample. Residual gaps are consistent with the small underestimation noted in the bias decomposition.}
+%     \label{fig:genus_lcc}
+% \end{figure}
+
 These results support out-of-sample generalization within the Majuro domain, where acquisition geometry (top-down ASV imagery), depth, water clarity, and community composition are comparable between splits. Extrapolation beyond Majuro, or to platforms or sites with different optics, depth, turbidity, substrate mix, or coral species compositions, should be treated as a covariate-shift problem. In such cases, we recommend a lightweight site adaptation: assemble a small site-specific validation set, recompute the bias decomposition (Table~\ref{tab:bias-decomposition}), and, if systematic shifts are detected, retune SAM2 mask thresholds and recalibrate the ensemble classifier using those samples. When shifts are large (for example, markedly different image geometry or species composition), full or partial retraining on the target distribution is warranted to ensure accurate estimates of live coral cover and bleaching.
 
 \subsection{Segmentation Quality: IoU and Dice}
@@ -630,31 +666,46 @@ These results support out-of-sample generalization within the Majuro domain, whe
 
 Coral-cover accuracy and the bias decomposition above summarize how well aggregate cover statistics are recovered, but do not directly quantify spatial overlap between predicted and annotated masks. In other words, we have not yet qualified how well the pipeline performs at the segmenting the \emph{correct} coral \emph{and} identifying it as the \emph{correct} class across the 17 taxonomic classes. We therefore additionally report pixel-level Intersection-over-Union (IoU) and the Dice coefficient, computed per test image and averaged within each taxonomic class across all images. These metrics are computed by comparing the ground-truth mask for class against the corresponding predicted mask (the union of all candidate masks classified into the same class, as detailed in Section~\ref{sec:reconstruct}).
 
+% For completion, we will define the standard metrics.For a given image and taxonomic class $k$ (e.g., a morpho-taxonomic/bleaching-status class, or the union of all live-coral classes for the Live Coral Cover row of Table~\ref{tab:iou-dice-taxonomy}), let $Y_k(p) \in \{0,1\}$ indicate whether pixel $p$ falls within the ground-truth mask for class $k$, and let $\hat{Y}_k(p) \in \{0,1\}$ indicate whether $p$ falls within the corresponding predicted mask (the union of candidate masks classified into $k$, as in Section~\ref{sec:reconstruct}). Summing over all $P$ pixels in the image,
+% \begin{equation}
+% \text{TP}_k = \sum_{p=1}^P Y_k(p)\,\hat{Y}_k(p), \quad
+% \text{FP}_k = \sum_{p=1}^P \big(1 - Y_k(p)\big)\,\hat{Y}_k(p), \quad
+% \text{FN}_k = \sum_{p=1}^P Y_k(p)\,\big(1 - \hat{Y}_k(p)\big),
+% \label{eq:tp_fp_fn}
+% \end{equation}
+% so that IoU and Dice for class $k$ are
+% \begin{equation}
+% \text{IoU}_k = \frac{\text{TP}_k}{\text{TP}_k+\text{FP}_k+\text{FN}_k}, \qquad
+% \text{Dice}_k = \frac{2\,\text{TP}_k}{2\,\text{TP}_k+\text{FP}_k+\text{FN}_k}.
+% \label{eq:iou_dice}
+% \end{equation}
+% This is exactly the pixel-level confusion-matrix computation used in our evaluation code: $\text{TP}_k$, $\text{FP}_k$, and $\text{FN}_k$ are pixel counts from the logical AND of the (possibly negated) ground-truth and predicted binary masks. Precision$_k = \text{TP}_k/(\text{TP}_k+\text{FP}_k)$ and Recall$_k = \text{TP}_k/(\text{TP}_k+\text{FN}_k)$ follow the same pixel counts.
+
 \begin{table}[htbp]
 \centering
 \caption{Pixel-level IoU, Dice, precision, and recall by taxonomic class, macro-averaged over the 111-image held-out test set.}
 \label{tab:iou-dice-taxonomy}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrr rr rr rr}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrrrr}
 \toprule
-\textbf{Class} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
+\textbf{Class} & \textbf{IoU} & \textbf{Dice} & \textbf{Precision} & \textbf{Recall} \\
 \midrule
-Live Coral Cover (all coral) & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
-Bleached (any genus)         & 0.350 & (0.033) & 0.427 & (0.034) & 0.635 & (0.037) & 0.395 & (0.037) \\
+Live Coral Cover (all coral) & 0.674 & 0.781 & 0.848 & 0.780 \\
+Bleached (any genus)         & 0.350 & 0.427 & 0.635 & 0.395 \\
 \midrule
-Branching Acropora & 0.728 & (0.038) & 0.752 & (0.038) & 0.752 & (0.062) & 0.501 & (0.063) \\
-Finger Acropora    & 0.619 & (0.031) & 0.702 & (0.030) & 0.794 & (0.024) & 0.679 & (0.034) \\
-Finger Porites     & 0.674 & (0.041) & 0.698 & (0.040) & 0.511 & (0.065) & 0.475 & (0.063) \\
-Knob Porites       & 0.720 & (0.037) & 0.754 & (0.035) & 0.623 & (0.060) & 0.500 & (0.058) \\
-Mounding           & 0.452 & (0.040) & 0.501 & (0.040) & 0.484 & (0.051) & 0.320 & (0.040) \\
-Oddball            & 0.473 & (0.047) & 0.475 & (0.047) & 0.050 & (0.034) & 0.057 & (0.035) \\
-Pocillopora        & 0.673 & (0.040) & 0.702 & (0.039) & 0.564 & (0.063) & 0.542 & (0.062) \\
-Table Acropora     & 0.622 & (0.043) & 0.642 & (0.043) & 0.360 & (0.064) & 0.431 & (0.070) \\
+Branching Acropora & 0.728 & 0.752 & 0.752 & 0.501 \\
+Finger Acropora    & 0.619 & 0.702 & 0.794 & 0.679 \\
+Finger Porites     & 0.674 & 0.698 & 0.511 & 0.475 \\
+Knob Porites       & 0.720 & 0.754 & 0.623 & 0.500 \\
+Mounding           & 0.452 & 0.501 & 0.484 & 0.320 \\
+Oddball            & 0.473 & 0.475 & 0.050 & 0.057 \\
+Pocillopora        & 0.673 & 0.702 & 0.564 & 0.542 \\
+Table Acropora     & 0.622 & 0.642 & 0.360 & 0.431 \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} IoU and Dice are computed per image at the pixel level (union of masks of the given class vs.\ everything else) and averaged across the 111 test images; standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images. Genus-level precision/recall are lower than the coral-vs-non-coral (``Live Coral Cover'') row because they require the correct genus label, as opposed to merely correct coral/non-coral discrimination; the Oddball class's especially low precision/recall reflects its heterogeneous composition and low training frequency (Table~\ref{tab:mask-cover}).
+\item \emph{Notes:} IoU and Dice are computed per image at the pixel level (union of masks of the given class vs.\ everything else) and averaged across the 111 test images. Genus-level precision/recall are lower than the coral-vs-non-coral (``Live Coral Cover'') row because they require the correct genus label, as opposed to merely correct coral/non-coral discrimination; the Oddball class's especially low precision/recall reflects its heterogeneous composition and low training frequency (Table~\ref{tab:mask-cover}).
 \end{tablenotes}
 \end{table}
 
@@ -669,24 +720,20 @@ To contextualize these numbers against an external baseline, Table~\ref{tab:cora
 \caption{Live coral cover (coral vs.\ non-coral) segmentation quality: NeuralReefer vs.\ CoralSCOP.}
 \label{tab:coralscop-comparison}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrr rr rr rr}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lcccccccc}
 \toprule
-\textbf{Method} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
+ & \multicolumn{4}{c}{\textbf{In-Sample} ($n=441$)} & \multicolumn{4}{c}{\textbf{Out-of-Sample} ($n=111$)} \\
+\cmidrule(lr){2-5} \cmidrule(lr){6-9}
+\textbf{Method} & IoU & Dice & Precision & Recall & IoU & Dice & Precision & Recall \\
 \midrule
-\multicolumn{9}{l}{\textit{In-Sample} ($n = 441$)} \\
-NeuralReefer & 0.714 & (0.010) & 0.813 & (0.008) & 0.882 & (0.007) & 0.792 & (0.009) \\
-Single CNN   & 0.695 & (0.010) & 0.801 & (0.008) & 0.851 & (0.008) & 0.783 & (0.009) \\
-CoralSCOP    & 0.503 & (0.011) & 0.635 & (0.011) & 0.618 & (0.011) & 0.766 & (0.012) \\
-\midrule
-\multicolumn{9}{l}{\textit{Out-of-Sample} ($n = 111$)} \\
-NeuralReefer & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
-Single CNN   & 0.641 & (0.021) & 0.755 & (0.019) & 0.820 & (0.019) & 0.738 & (0.021) \\
-CoralSCOP    & 0.487 & (0.023) & 0.614 & (0.024) & 0.618 & (0.023) & 0.738 & (0.026) \\
+NeuralReefer & 0.714 & 0.813 & 0.882 & 0.792 & 0.674 & 0.781 & 0.848 & 0.780 \\
+Single CNN   & 0.695 & 0.801 & 0.851 & 0.783 & 0.641 & 0.755 & 0.820 & 0.738 \\
+CoralSCOP    & 0.503 & 0.635 & 0.618 & 0.766 & 0.487 & 0.614 & 0.618 & 0.738 \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} All methods are scored identically (Section~\ref{sec:iou_dice}'s pixel-level IoU/Dice definitions) against the same 552 ground-truth annotations, split as elsewhere in this paper ($n=441$ training images, $n=111$ held-out test images). Standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images. CoralSCOP is a binary coral/non-coral segmenter and is compared only on the Live Coral Cover task, for which it provides a directly comparable label. ``Single CNN'' is an ablation that replaces the 5-model ensemble with submodel 4 alone (otherwise identical pipeline), included as a non-ensemble baseline.
+\item \emph{Notes:} All methods are scored identically (Section~\ref{sec:iou_dice}'s pixel-level IoU/Dice definitions) against the same 552 ground-truth annotations, split as elsewhere in this paper ($n=441$ training images, $n=111$ held-out test images). CoralSCOP is a binary coral/non-coral segmenter and is compared only on the Live Coral Cover task, for which it provides a directly comparable label. ``Single CNN'' is an ablation that replaces the 5-model ensemble with submodel 4 alone (otherwise identical pipeline), included as a non-ensemble baseline.
 \end{tablenotes}
 \end{table}
 
@@ -699,23 +746,54 @@ NeuralReefer outperforms CoralSCOP on every metric in both splits, most notably 
     \label{fig:iou-exceedance}
 \end{figure}
 
+% Clearly, there are cases where even a well-calibrated model, and possibly even expert human annotators, would struggle: a handful of small, live coral colonies scattered within a field of rubble and dead coral skeleton are visually similar to their surroundings and easy to miss regardless of segmentation quality. To characterize this, we examined mean IoU and mean absolute LCC error conditional on true LCC quartile within the 111-image test set (quartile boundaries: 9.5\%, 24.0\%, 41.0\%, 74.1\% mean true LCC, $n=28,28,28,27$ respectively); we do not tabulate this breakdown separately, as Figure~\ref{fig:iou-exceedance} already characterizes the full distribution of IoU across the test set.
+
+% Table commented out: the conditional-IoU-by-LCC-quartile table was
+% judged redundant with the IoU exceedance curve (Figure~\ref{fig:iou-exceedance}),
+% which already conveys the full distribution of per-image IoU. The
+% quartile-level findings are retained as prose in the surrounding discussion.
+% \begin{table}[htbp]
+% \centering
+% \caption{Live coral cover IoU conditional on true LCC quartile, held-out test set.}
+% \label{tab:conditional-iou}
+% \resizebox{\linewidth}{!}{%
+% \begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrrrr}
+% \toprule
+% \textbf{True LCC quartile} & $n$ & \textbf{Mean True LCC} & \textbf{Mean IoU} & \textbf{Mean $|$Predicted $-$ True$|$} \\
+% \midrule
+% 1 (lowest)  & 28 & 9.5\%  & 0.579 & 6.5 pp \\
+% 2           & 28 & 24.0\% & 0.646 & 4.9 pp \\
+% 3           & 28 & 41.0\% & 0.776 & 5.4 pp \\
+% 4 (highest) & 27 & 74.1\% & 0.696 & 21.1 pp \\
+% \bottomrule
+% \end{tabular*}%
+% }
+% \begin{tablenotes}
+% \item \emph{Notes:} pp = percentage points of image area. Quartiles are defined on true (ground-truth) LCC within the 111-image test set.
+% \end{tablenotes}
+% \end{table}
+
+% The lowest-LCC quartile has the lowest mean IoU (0.579) despite the smallest mean absolute error (6.5 percentage points): when true coral cover is small, a modest absolute miss (e.g., predicting 4\% cover when the truth is 6\%) already implies a moderate IoU, since IoU is a ratio measure that is intrinsically sensitive to the size of the denominator. In other words, low IoU on sparse-coral images does not necessarily indicate poor practical performance---specificity and absolute cover error remain low throughout. The highest-LCC quartile shows the opposite pattern: comparable IoU to the low-cover extreme, but driven instead by a much larger absolute error (21.1 percentage points), consistent with the systematic underestimation at high cover already noted in the LCC calibration (Figure~\ref{fig:lcc-trend}) and attributable to boundary loss between densely overlapping colonies. We recommend that practitioners interpret IoU jointly with absolute cover error and cover-conditional benchmarks such as these, rather than as a single aggregate number, particularly when comparing performance across reefs or images with heterogeneous coral cover.
+
 \section{Limitations \& Future Work}
 \label{sec:limitations}
 
 While the pipeline demonstrates strong performance in segmenting and classifying coral imagery, we outline several methodological and practical limitations of the current framework.
 
-First, the generalizability of our results is constrained by the data domain. All images were collected by the Yellowfin Surfzone ASV over a large patch reef in the northwest of Majuro, Marshall Islands. This narrow capture space may induce distributional shift when applied to sites with different environmental conditions even across sites in Majuro. We do not view this as a defect of the proposed pipeline so much as a starting point: the modular design (Figure~\ref{fig:pipeline}) is intended to support continued retraining as annotated imagery from additional reef systems becomes available, with the SAM2 tuning, CNN submodels, and ensemble combiner each independently updatable without redesigning the pipeline. Demonstrating this multi-site extension empirically is future work, contingent on acquiring comparably annotated surveys from other reef systems.
+First, the generalizability of our results is constrained by the data domain. All images were collected by the Yellowfin Surfzone ASV over a large patch reef in the northwest of Majuro, Marshall Islands. This narrow capture space may induce distributional shift when applied to sites with different environmental conditions even across sites in Majuro. The modular design presented here (Figure~\ref{fig:pipeline}) is intended to support continued retraining as annotated imagery from additional reef systems becomes available, with the SAM2 tuning, CNN submodels, and ensemble combiner each independently updatable without redesigning the pipeline, and tracking model performance across new reef domains is an important area for future work.
 
-Second, the segmentation stage remains both the bottleneck and the largest source of potential gains. Our mask consolidation algorithm balances recall of small objects with precision of large structures, but it remains an unsupervised procedure relying on tuned hyperparameters and grid-based prompt distributions. Performance is therefore sensitive to parameterization and limits reproducibility. The lowest-IoU cases are disproportionately scenes with sparse, degenerate coral cover---a handful of small live colonies scattered within a field of rubble and dead skeleton, visually similar enough to their surroundings that even expert annotators can disagree on their boundaries. One way to recover some of these missed instances is simply to run SAM2 with additional, independent prompt-grid configurations and merge the results, increasing the chance that at least one configuration proposes a mask over a small or camouflaged colony; however, since each additional configuration multiplies inference cost roughly linearly, this does not scale favorably to large surveys. A promising alternative would be a hybrid approach: precede SAM2 with a lightweight supervised detector (e.g., YOLOv8), using bounding boxes as proposals and SAM2 for mask refinement. Because such a detector is trained directly on the target objects, it remains a more promising direction for improving recall over simply adding more SAM2 passes. Such hybridization could mitigate false positives, reduce inference time, and provide a more supervised handle on segmentation. A related alternative, closer in spirit to CoralSCOP \citep{zheng2024}, would replace our dense grid-prompted SAM2 configuration with point prompting---querying SAM2 at a sparser set of learned or heuristically-placed points and applying our classification ensemble to the resulting masks---potentially reducing the number of redundant proposals that must be classified and consolidated per image.
+Second, while model predictions generally performed well, the observed underestimations of average coral cover and bleaching rates are ecologically meaningful and should be considered when interpreting the results. Managers looking to incorporate the predictions of any machine learning model should be aware of the specific biases of that model and training iteration. Future work involving training iterations of the model presented here with new training data should examine whether these biases persist across different reef domains and image capture methods.
 
-Third, the computational demands of the modular pipeline pose challenges for real-time inference and scaling to large collections. The SAM2 module generates multiple mask proposals per image, taking 1--3 seconds per frame even with GPU utilization. Ensemble optimization requires repeated forward passes across CNNs, producing a concave accuracy--throughput tradeoff. Practitioners must therefore select a feasible ensemble size (e.g. with perhaps $M<5$) that balances performance with computational resources. A similar tradeoff governs test-time augmentation: because each CNN submodel was trained exclusively under the same stochastic augmentation used elsewhere in this pipeline, a single augmented crop is already a valid, in-distribution input at inference, but classification could in principle be stabilized further by classifying several independently augmented draws of the same mask and aggregating (e.g.\ the modal prediction, or another stacked re-learner) rather than a single draw. We use one augmented draw per mask at inference throughout this paper for computational efficiency, and leave a systematic evaluation of this accuracy-compute tradeoff to future work.
+Third, the segmentation stage remains both the bottleneck and the largest source of potential gains. Our mask consolidation algorithm balances recall of small objects with precision of large structures, but it remains an unsupervised procedure relying on tuned hyperparameters and grid-based prompt distributions. Performance is therefore sensitive to parameterization and limits reproducibility. The lowest-IoU cases are disproportionately scenes with sparse, degenerate coral cover---a handful of small live colonies scattered within a field of rubble and dead skeleton, visually similar enough to their surroundings that even expert annotators can disagree on their boundaries. One way to recover some of these missed instances is simply to run SAM2 with additional, independent prompt-grid configurations and merge the results, increasing the chance that at least one configuration proposes a mask over a small or camouflaged colony; however, since each additional configuration multiplies inference cost roughly linearly, this does not scale favorably to large surveys. A promising alternative would be a hybrid approach: precede SAM2 with a lightweight supervised detector (e.g., YOLOv8 \citep{yolov8}), using bounding boxes as proposals and SAM2 for mask refinement. Because such a detector is trained directly on the target objects, it remains a more promising direction for improving recall over simply adding more SAM2 passes. Such hybridization could mitigate false positives, reduce inference time, and provide a more supervised handle on segmentation. A related alternative, closer in spirit to CoralSCOP \citep{zheng2024}, would replace our dense grid-prompted SAM2 configuration with point prompting---querying SAM2 at a sparser set of learned or heuristically-placed points and applying our classification ensemble to the resulting masks---potentially reducing the number of redundant proposals that must be classified and consolidated per image.
 
-Fourth, our choice of ensemble combiner (Section~\ref{sec:cnn}) prioritizes interpretability over a marginally higher out-of-sample performance. Among the aggregation schemes we explored, a small neural meta-learner attained the highest out-of-sample recall and $F_2$, modestly exceeding the class-reweighting scheme adopted throughout this paper. However, its parameters admit no analogue of the class-reweighting scheme's per-model responsibility and per-class calibration decomposition. Revisiting the neural meta-learner with post hoc interpretability tools is a natural direction for future work if predictive performance is prioritized over interpretability.
+Fourth, the computational demands of the modular pipeline pose challenges for real-time inference and scaling to large collections. The SAM2 module generates multiple mask proposals per image, taking 1--3 seconds per frame even with GPU utilization. Ensemble optimization requires repeated forward passes across CNNs, producing a concave accuracy--throughput tradeoff. Practitioners must therefore select a feasible ensemble size (e.g. with perhaps $M<5$) that balances performance with computational resources. A similar tradeoff governs test-time augmentation: because each CNN submodel was trained exclusively under the same stochastic augmentation used elsewhere in this pipeline, a single augmented crop is already a valid, in-distribution input at inference, but classification could in principle be stabilized further by classifying several independently augmented draws of the same mask and aggregating (e.g.\ the modal prediction, or another stacked re-learner) rather than a single draw. We use one augmented draw per mask at inference throughout this paper for computational efficiency, and leave a systematic evaluation of this accuracy-compute tradeoff to future work.
 
-Fifth, the classification formulation is restrictive. We collapse a hierarchical taxonomy into a flat 17-class problem, ignoring the conditional structure that taxa and bleaching labels are only meaningful conditional on coral presence. This design risks semantically inconsistent predictions and scales poorly with taxonomy size. To illustrate the problem of dimensionality, consider $\kappa$ genera. The flat formulation requires an output vector in $\mathbb{R}^{2\kappa+1}$ (two bleaching states per coral taxa label, plus a non-coral class). A more parsimonious multi-task architecture would decompose outputs as $y = (G,B,S)$, where $G \in \{1,\ldots,\kappa\}$ encodes coral taxa, $B \in \{0,1\}$ bleaching, and $S \in \{0,1\}$ coral/non-coral, corresponding to an output space in $\mathbb{R}^{\kappa+2}$.
+Fifth, our choice of ensemble combiner (Section~\ref{sec:cnn}) prioritizes interpretability over a marginally higher out-of-sample performance. Among the aggregation schemes we explored, a small neural meta-learner attained the highest out-of-sample recall and $F_2$, modestly exceeding the class-reweighting scheme adopted throughout this paper. However, its parameters admit no analogue of the class-reweighting scheme's per-model responsibility and per-class calibration decomposition. Revisiting the neural meta-learner with post hoc interpretability tools is a natural direction for future work if predictive performance is prioritized over interpretability.
+
+Sixth, the classification formulation is restrictive. We collapse a hierarchical taxonomy into a flat 17-class problem, ignoring the conditional structure that taxa and bleaching labels are only meaningful conditional on coral presence. This design risks semantically inconsistent predictions and scales poorly with taxonomy size. To illustrate the problem of dimensionality, consider $\kappa$ genera. The flat formulation requires an output vector in $\mathbb{R}^{2\kappa+1}$ (two bleaching states per coral taxa label, plus a non-coral class). A more parsimonious multi-task architecture would decompose outputs as $y = (G,B,S)$, where $G \in \{1,\ldots,\kappa\}$ encodes coral taxa, $B \in \{0,1\}$ bleaching, and $S \in \{0,1\}$ coral/non-coral, corresponding to an output space in $\mathbb{R}^{\kappa+2}$.
 Advances in hierarchical and multi-label learning \citep{wehrmann2018hierarchical, deng2014large, wang2016cnn, nam2014large} suggest that architectures incorporating these dependencies improve both interpretability and model performance.
 
-Sixth, our estimates of coral cover are computed as a Euclidean projection on the image plane, ignoring vertical relief. This limitation mirrors those of planar photographic surveys \citep{peerj954}, where estimates are biased relative to true three-dimensional rugosity. This is especially problematic for reefs with steep inclines or vertical walls, where the area of available reef substrate is much greater than the 2D planar area.
+Seventh, our estimates of coral cover are computed as a Euclidean projection on the image plane, ignoring vertical relief. This limitation mirrors those of planar photographic surveys \citep{peerj954}, where estimates are biased relative to true three-dimensional rugosity. This is especially problematic for reefs with steep inclines or vertical walls, where the area of available reef substrate is much greater than the 2D planar area. 
 
 Finally, our augmentation and oversampling strategy, while useful for regularization, may not capture the full variability encountered in field conditions. Regenerating augmentations per epoch does not guarantee robustness to unseen phenomena such as turbidity or glare. A more systematic characterization of the augmentation distribution relative to true environmental variability is warranted. Similarly, expanding the label space to include additional categories or finer-grained taxonomic classes would require relabeling and potential retraining of all classification modules. A related source of label noise stems from how synthetic non-coral training examples are constructed: a candidate SAM2 mask is retained as a non-coral negative whenever its overlap with any annotated coral polygon falls at or below a fixed tolerance (i.e.\ a negative mask has at most 20\% of the candidate mask's own pixels under our fitted pipeline's hyperparameters), and is discarded otherwise. Candidate masks with overlap strictly below this threshold are hard-labeled non-coral even though a nontrivial minority of their pixels are genuine live coral, which can confuse the classifier by pairing a partly-coral crop with a purely negative label. Lowering this threshold reduces this label noise but discards more, and disproportionately larger, candidate masks from the synthetic-negative training pool, so the current value reflects a deliberate bias-variance tradeoff. Characterizing this tradeoff more precisely is left to future work.
 
@@ -749,18 +827,18 @@ Because Yellowfin captures images at one-second intervals along a survey track, 
 \caption{Live coral cover IoU, Dice, and pixel accuracy on the test set, with vs.\ without spatially-contaminated test images excluded.}
 \label{tab:spatial-robustness}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lr rr rr rr}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrrrr}
 \toprule
-\textbf{Test subset} & $n$ & \textbf{IoU} & & \textbf{Dice} & & \textbf{Accuracy} & \\
+\textbf{Test subset} & $n$ & \textbf{IoU} & \textbf{Dice} & \textbf{Accuracy} \\
 \midrule
-All test images & 111 & 0.674 & (0.021) & 0.781 & (0.018) & 0.872 & (0.014) \\
-2\,m            &  96 & 0.675 & (0.021) & 0.783 & (0.020) & 0.884 & (0.014) \\
-5\,m            &  39 & 0.720 & (0.030) & 0.821 & (0.024) & 0.903 & (0.013) \\
+All test images                & 111 & 0.674 & 0.781 & 0.872 \\
+Excluding images within 2\,m of a training image & 96  & 0.675 & 0.783 & 0.884 \\
+Excluding images within 5\,m of a training image & 39  & 0.720 & 0.821 & 0.903 \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} ``2\,m'' and ``5\,m'' denote subsets that exclude test images located within 2\,m and 5\,m of any training image (by UTM coordinates), respectively. 6 of the 111 test images lack usable GPS/UTM coordinates and are excluded from this spatial check but retained in all three subsets. 15 of the remaining 105 geolocated test images fall within 2\,m of a training image; 72 of 105 fall within 5\,m, reflecting the survey's dense (roughly one-second-interval) sampling along a continuous track. Standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images.
+\item \emph{Notes:} 6 of the 111 test images lack usable GPS/UTM coordinates and are excluded from this check entirely (retained in all other results in this paper). 15 of the remaining 105 geolocated test images fall within 2\,m of a training image; 72 of 105 fall within 5\,m, reflecting the survey's dense (roughly one-second-interval) sampling along a continuous track.
 \end{tablenotes}
 \end{table}
 
