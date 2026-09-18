@@ -45,16 +45,20 @@ from segmenter import CoralSegmenter
 SEED = 42
 
 EXAMPLES_DIR = "figures/paper/examples"
-PAPER_DIR = "paper"
+# The old "paper" directory (an earlier, now-abandoned draft location) has
+# been deleted; submission/ is the live document this repeatedly publishes
+# into.
+PAPER_DIR = "submission"
 ANNOTATION_PATH = os.path.join(TRAIN_DIR, "_annotations.coco.json")
 
 # Order determines a/b/c/d mapping in Figure 9.
 # GPAB5827/GPAB5497: high-IoU (good) examples.
-# GPAB2752/GPAB3067: low-IoU failure cases added at reviewer request.
+# GPAB3216/GPAB3067: low-IoU failure cases added at reviewer request
+# (GPAB3216 replaces the original GPAB2752 over-pick example).
 EXAMPLE_IMAGES = {
     "GPAB5827": "yellowfin_segment.v18i.coco-segmentation/train/GPAB5827_jpg.rf.7cc4d07d38d46d7c26b93ba7539d1662.jpg",
     "GPAB5497": "yellowfin_segment.v18i.coco-segmentation/train/GPAB5497_jpg.rf.0ffa6911ae7ba47037807745fe6d0550.jpg",
-    "GPAB2752": "yellowfin_segment.v18i.coco-segmentation/train/GPAB2752_jpg.rf.3d3a23e7d01325a3e36b5203981b2c6b.jpg",
+    "GPAB3216": "yellowfin_segment.v18i.coco-segmentation/train/GPAB3216_jpg.rf.6eae2e3fa8c98eff50cf0d32d1c876b1.jpg",
     "GPAB3067": "yellowfin_segment.v18i.coco-segmentation/train/GPAB3067_jpg.rf.787b1d28ce4fe02d8dcdc53034e25912.jpg",
 }
 
