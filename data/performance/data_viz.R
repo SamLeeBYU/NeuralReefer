@@ -970,7 +970,7 @@ p_fig2 <- ggplot(ann_per_image, aes(x = n_annotations, fill = split)) +
   facet_wrap(~split, scales = "free_y") +
   labs(title = "Manual Annotations per Image", x = "Number of Annotations", y = "Count", fill = "Split") +
   nf.theme.facet
-ggsave(file.path(PAPER_FIG_DIR, "annotations_hist_both.png"), p_fig2, width = 12, height = 7, dpi = 300)
+ggsave(file.path(PAPER_FIG_DIR, "fig2.png"), p_fig2, width = 12, height = 7, dpi = 300)
 
 # ---- Figure 3: ground-truth LCC density, train vs test ----------------------
 lcc_true <- tax_all %>% filter(taxonomy == "lcc")
@@ -986,25 +986,32 @@ p_fig3 <- ggplot(lcc_true, aes(x = true_frac, fill = split)) +
   labs(title = "Live Coral Cover (Ground Truth): Train vs Test",
        x = "Live Coral Cover (% of image area)", y = "Density", fill = "Split") +
   nf.theme.single
-ggsave(file.path(PAPER_FIG_DIR, "coral_cover_density_train_vs_test.png"), p_fig3, width = 8, height = 6, dpi = 300)
+ggsave(file.path(PAPER_FIG_DIR, "fig3.png"), p_fig3, width = 8, height = 6, dpi = 300)
 
-# ---- Figure 10: predicted LCC density, train vs test -------------------------
-med10 <- lcc_true %>% group_by(split) %>% summarise(m = median(pred_frac, na.rm = TRUE))
-cat("Fig 10 (pred LCC) medians:\n"); print(med10 %>% mutate(pct = fmt_pct(m)))
+# ---- Figure 11: predicted LCC density, train vs test -------------------------
+# (Document position, not the historical variable-name numbering below --
+# Figure 9 was split into two figures (9: qual-results, 10: qual-results-fail)
+# at some point after these variable names were first assigned, shifting
+# every subsequent figure's TRUE position by +1 relative to its old name;
+# Figures 12/13/14 were also later reordered relative to each other. Variable
+# names and output filenames here now match each figure's current position in
+# submission/main.tex -- keep them in sync if the document order changes again.)
+med_fig11 <- lcc_true %>% group_by(split) %>% summarise(m = median(pred_frac, na.rm = TRUE))
+cat("Fig 11 (pred LCC) medians:\n"); print(med_fig11 %>% mutate(pct = fmt_pct(m)))
 
-p_fig10 <- ggplot(lcc_true, aes(x = pred_frac, fill = split)) +
+p_fig11 <- ggplot(lcc_true, aes(x = pred_frac, fill = split)) +
   geom_density(alpha = 0.5, color = NA) +
-  geom_vline(data = med10, aes(xintercept = m, color = split), linetype = "dashed", linewidth = 1, show.legend = FALSE) +
+  geom_vline(data = med_fig11, aes(xintercept = m, color = split), linetype = "dashed", linewidth = 1, show.legend = FALSE) +
   scale_x_continuous(labels = scales::percent) +
   scale_fill_manual(values = PAL2) +
   scale_color_manual(values = PAL2) +
   labs(title = "Predicted Live Coral Cover: Train vs Test",
        x = "Predicted Live Coral Cover (% of image area)", y = "Density", fill = "Split") +
   nf.theme.single
-ggsave(file.path(PAPER_FIG_DIR, "lcc_density_train_vs_test.png"), p_fig10, width = 8, height = 6, dpi = 300)
+ggsave(file.path(PAPER_FIG_DIR, "fig11.png"), p_fig11, width = 8, height = 6, dpi = 300)
 
-# ---- Figure 11: predicted vs actual LCC, faceted by split, quadratic fit ---
-p_fig11 <- ggplot(lcc_true, aes(x = true_frac, y = pred_frac)) +
+# ---- Figure 12: predicted vs actual LCC, faceted by split, quadratic fit ---
+p_fig12 <- ggplot(lcc_true, aes(x = true_frac, y = pred_frac)) +
   # shape=16 (not the default 19) avoids a spurious darker rim that shape 19
   # renders around each point under alpha transparency in this ggplot2
   # version; size halved per requested point-size reduction.
@@ -1017,20 +1024,20 @@ p_fig11 <- ggplot(lcc_true, aes(x = true_frac, y = pred_frac)) +
   labs(title = "Calibration of Predicted vs. Observed Live Coral Cover",
        x = "Observed LCC", y = "Predicted LCC") +
   nf.theme.facet
-ggsave(file.path(PAPER_FIG_DIR, "lcc_pred_vs_actual_faceted.png"), p_fig11, width = 13, height = 7.5, dpi = 300)
+ggsave(file.path(PAPER_FIG_DIR, "fig12.png"), p_fig12, width = 13, height = 7.5, dpi = 300)
 
-# ---- Figure 12: bleached coral cover, true vs pred, train & test -----------
+# ---- Figure 14: bleached coral cover, true vs pred, train & test -----------
 bcc <- tax_all %>% filter(taxonomy == "bleached") %>%
   select(image_id, split, true_frac, pred_frac) %>%
   pivot_longer(c(true_frac, pred_frac), names_to = "type", values_to = "value") %>%
   mutate(type = recode(type, true_frac = "Actual", pred_frac = "Predicted"))
 
-med12 <- bcc %>% group_by(split, type) %>% summarise(m = median(value, na.rm = TRUE), .groups = "drop")
-cat("Fig 12 (BCC) medians:\n"); print(med12 %>% mutate(pct = fmt_pct(m)))
+med_fig14 <- bcc %>% group_by(split, type) %>% summarise(m = median(value, na.rm = TRUE), .groups = "drop")
+cat("Fig 14 (BCC) medians:\n"); print(med_fig14 %>% mutate(pct = fmt_pct(m)))
 
-p_fig12 <- ggplot(bcc, aes(x = value, fill = type)) +
+p_fig14 <- ggplot(bcc, aes(x = value, fill = type)) +
   geom_density(alpha = 0.5, color = NA) +
-  geom_vline(data = med12, aes(xintercept = m, color = type), linetype = "dashed", linewidth = 1, show.legend = FALSE) +
+  geom_vline(data = med_fig14, aes(xintercept = m, color = type), linetype = "dashed", linewidth = 1, show.legend = FALSE) +
   scale_x_continuous(labels = scales::percent) +
   scale_fill_manual(values = PAL2) +
   scale_color_manual(values = PAL2) +
@@ -1038,24 +1045,24 @@ p_fig12 <- ggplot(bcc, aes(x = value, fill = type)) +
   labs(title = "Bleached Coral Cover: True vs. Predicted",
        x = "Bleached Coral Cover (% of image area)", y = "Density", fill = NULL) +
   nf.theme.facet
-ggsave(file.path(PAPER_FIG_DIR, "bleached_cover_true_vs_pred_train_test.png"), p_fig12, width = 13, height = 7.5, dpi = 300)
+ggsave(file.path(PAPER_FIG_DIR, "fig14.png"), p_fig14, width = 13, height = 7.5, dpi = 300)
 
 # ---- Figure 13: pixel-level segmentation accuracy density, train vs test ---
-med14 <- lcc_true %>% group_by(split) %>% summarise(m = median(accuracy, na.rm = TRUE))
-cat("Fig 13 (accuracy) medians:\n"); print(med14 %>% mutate(pct = fmt_pct(m)))
+med_fig13 <- lcc_true %>% group_by(split) %>% summarise(m = median(accuracy, na.rm = TRUE))
+cat("Fig 13 (accuracy) medians:\n"); print(med_fig13 %>% mutate(pct = fmt_pct(m)))
 
-p_fig14 <- ggplot(lcc_true, aes(x = accuracy, fill = split)) +
+p_fig13 <- ggplot(lcc_true, aes(x = accuracy, fill = split)) +
   geom_density(alpha = 0.5, color = NA) +
-  geom_vline(data = med14, aes(xintercept = m, color = split), linetype = "dashed", linewidth = 1, show.legend = FALSE) +
+  geom_vline(data = med_fig13, aes(xintercept = m, color = split), linetype = "dashed", linewidth = 1, show.legend = FALSE) +
   scale_x_continuous(labels = scales::percent) +
   scale_fill_manual(values = PAL2) +
   scale_color_manual(values = PAL2) +
   labs(title = "Pixel-Level Segmentation Accuracy: Train vs Test",
        x = "Segmentation Accuracy", y = "Density", fill = "Split") +
   nf.theme.single
-ggsave(file.path(PAPER_FIG_DIR, "accuracy_density_train_vs_test.png"), p_fig14, width = 8, height = 6, dpi = 300)
+ggsave(file.path(PAPER_FIG_DIR, "fig13.png"), p_fig13, width = 8, height = 6, dpi = 300)
 
-# ---- Figure 14 (Appendix): depth vs accuracy, full range + zoomed panel ---
+# ---- Figure B.16 (Appendix): depth vs accuracy, full range + zoomed panel --
 depth_acc_valid <- lcc_true %>% filter(!is.na(Depth_WaterSurface), !is.na(accuracy))
 
 ZOOM_DEPTH_RANGE <- c(-7.5, 0)
@@ -1065,7 +1072,7 @@ depth_acc_zoom_rows <- depth_acc_valid %>%
   filter(Depth_WaterSurface >= ZOOM_DEPTH_RANGE[1], Depth_WaterSurface <= ZOOM_DEPTH_RANGE[2],
          accuracy >= ZOOM_ACC_RANGE[1], accuracy <= ZOOM_ACC_RANGE[2])
 pct_in_zoom <- 100 * nrow(depth_acc_zoom_rows) / nrow(depth_acc_valid)
-cat(sprintf("\nFig B.15 zoom panel: %.1f%% of test/train images (n=%d of %d) fall within depth %.1f-%.1fm and accuracy %.0f-%.0f%%\n",
+cat(sprintf("\nFig B.16 zoom panel: %.1f%% of test/train images (n=%d of %d) fall within depth %.1f-%.1fm and accuracy %.0f-%.0f%%\n",
             pct_in_zoom, nrow(depth_acc_zoom_rows), nrow(depth_acc_valid),
             ZOOM_DEPTH_RANGE[2], ZOOM_DEPTH_RANGE[1], 100*ZOOM_ACC_RANGE[1], 100*ZOOM_ACC_RANGE[2]))
 
@@ -1074,7 +1081,7 @@ depth_acc_panel_zoom <- depth_acc_zoom_rows %>% mutate(panel = "Zoomed")
 depth_acc_combined <- bind_rows(depth_acc_panel_full, depth_acc_panel_zoom) %>%
   mutate(panel = factor(panel, levels = c("Full Range", "Zoomed")))
 
-p_fig15 <- ggplot(depth_acc_combined, aes(x = Depth_WaterSurface, y = accuracy, color = split)) +
+p_figb16 <- ggplot(depth_acc_combined, aes(x = Depth_WaterSurface, y = accuracy, color = split)) +
   geom_point(alpha = 0.75, size = 1.125, shape = 16) +
   geom_smooth(data = depth_acc_combined %>% filter(panel == "Zoomed"),
               method = "lm", formula = y ~ x, se = FALSE, linewidth = 1) +
@@ -1084,7 +1091,7 @@ p_fig15 <- ggplot(depth_acc_combined, aes(x = Depth_WaterSurface, y = accuracy, 
   labs(title = "Pixel-Level Segmentation Accuracy vs. Water Depth",
        x = "Depth (m)", y = "Segmentation Accuracy", color = "Split") +
   nf.theme.facet
-ggsave(file.path(PAPER_FIG_DIR, "depth_accuracy.png"), p_fig15, width = 13, height = 7.5, dpi = 300)
+ggsave(file.path(PAPER_FIG_DIR, "figb16.png"), p_figb16, width = 13, height = 7.5, dpi = 300)
 
 cat("\nWrote current-vintage Figs 2/3/10/11/12/13/14(appendix) to", PAPER_FIG_DIR, "\n")
 
@@ -1249,34 +1256,51 @@ cat("\n=== NeuralReefer vs. CoralSCOP: LCC IoU/Dice/Precision/Recall (pooled TP/
     "bootstrap SE over 2000 image resamples; n = images with any ground-truth coral) ===\n")
 print(comparison_table, n = Inf)
 
-# ---- IoU exceedance curve: NeuralReefer vs. CoralSCOP, test set only -------
+# ---- Figure 15: IoU exceedance curve, NeuralReefer vs. CoralSCOP, test set -
 # P(IoU >= x) for x in [0,1] -- "what fraction of test images does each
-# method score at least this well on?" (reviewer comment 9b's quantile ask,
-# doubling as the Figure-11-style IoU figure per the confirmed design).
+# method score at least this well on?" (reviewer comment 9b's quantile ask).
+# Per-image IoU here is intentionally recomputed from the raw tp_px/fp_px/
+# fn_px counts (with the same "undefined -> NA, not 1.0" zero-denominator
+# rule as pixel_pooled_stats/train.py's pixel_confusion_metrics) rather than
+# read off the CSV's own `iou` column, so this figure uses the same IoU
+# definition as Tables 6-8 instead of silently trusting a column that was
+# computed by a since-changed convention (train.py's old "both masks empty
+# -> 1.0" default). This is a no-op numerically for LCC specifically -- no
+# test image has zero ground-truth-and-predicted coral simultaneously -- but
+# keeps the figure correct by construction rather than by coincidence.
+per_image_iou <- function(df) {
+  total_px <- df$tp_px + df$fp_px + df$fn_px
+  ifelse(total_px == 0, NA_real_, df$tp_px / total_px)
+}
+
 exceedance_curve <- function(iou_vals, method_name) {
   xs <- seq(0, 1, by = 0.01)
   tibble(method = method_name, threshold = xs,
          pct_exceeding = sapply(xs, function(x) mean(iou_vals >= x, na.rm = TRUE)))
 }
 
-nr_test_iou <- tax_test %>% filter(taxonomy == "lcc") %>% pull(iou)
-cs_test_iou <- coralscop %>% filter(split == "Out-of-Sample") %>% pull(iou)
+nr_test_iou <- per_image_iou(tax_test %>% filter(taxonomy == "lcc"))
+cs_test_iou <- per_image_iou(coralscop %>% filter(split == "Out-of-Sample"))
 
 exceedance_df <- bind_rows(
-  exceedance_curve(nr_test_iou, "NeuralReefer"),
+  exceedance_curve(nr_test_iou, "Present model"),
   exceedance_curve(cs_test_iou, "CoralSCOP")
 )
 
-p_exceedance <- ggplot(exceedance_df, aes(x = threshold, y = pct_exceeding, color = method)) +
+p_fig15 <- ggplot(exceedance_df, aes(x = threshold, y = pct_exceeding, color = method)) +
   geom_line(linewidth = 1.2) +
   scale_x_continuous(labels = scales::percent) +
   scale_y_continuous(labels = scales::percent) +
-  scale_color_manual(values = c("NeuralReefer" = PAL2[1], "CoralSCOP" = PAL2[2])) +
+  scale_color_manual(values = c("Present model" = PAL2[1], "CoralSCOP" = PAL2[2])) +
   labs(title = "Live Coral Cover IoU Exceedance, Test Set",
        x = "IoU Threshold", y = "% of Test Images At or Above Threshold", color = NULL) +
   nf.theme.single
-ggsave(file.path(PAPER_FIG_DIR, "iou_exceedance_vs_coralscop.png"), p_exceedance, width = 8, height = 6, dpi = 300)
-cat("\nWrote", file.path(PAPER_FIG_DIR, "iou_exceedance_vs_coralscop.png"), "\n")
+ggsave(file.path(PAPER_FIG_DIR, "fig15.png"), p_fig15, width = 8, height = 6, dpi = 300)
+cat("\nWrote", file.path(PAPER_FIG_DIR, "fig15.png"), "\n")
+
+cat(sprintf("\nExceedance thresholds (prose in Section~5.4): NeuralReefer >= 0.5: %.1f%%, CoralSCOP >= 0.5: %.1f%%, NeuralReefer >= 0.7: %.1f%%, CoralSCOP >= 0.7: %.1f%%\n",
+            100 * mean(nr_test_iou >= 0.5, na.rm = TRUE), 100 * mean(cs_test_iou >= 0.5, na.rm = TRUE),
+            100 * mean(nr_test_iou >= 0.7, na.rm = TRUE), 100 * mean(cs_test_iou >= 0.7, na.rm = TRUE)))
 
 # ---- Conditional IoU: mean IoU by true-LCC quartile, test set --------------
 # Reviewer item 9c: low-LCC images look bad on IoU even when the absolute
