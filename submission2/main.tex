@@ -164,21 +164,21 @@ Coral reefs \sep Machine vision \sep Ecological monitoring \sep Semantic segment
 % \begin{tabular*}{\wd\perftablebox}{...} at its normal location.
 % Content here must stay IDENTICAL to Table 6 below.
 \sbox{\perftablebox}{%
-\begin{tabular}{lrr rr rr rr}
+\begin{tabular}{lr rr rr rr rr}
 \toprule
-\textbf{Class} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
+\textbf{Class} & $n$ & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
-Live Coral Cover (all coral) & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
-Bleached (any genus)         & 0.350 & (0.033) & 0.427 & (0.034) & 0.635 & (0.037) & 0.395 & (0.037) \\
+Live Coral Cover (all coral) & 109 & 0.691 & (0.029) & 0.817 & (0.021) & 0.865 & (0.027) & 0.774 & (0.029) \\
+Bleached (any genus)         &  97 & 0.328 & (0.046) & 0.494 & (0.052) & 0.531 & (0.077) & 0.462 & (0.061) \\
 \midrule
-Branching Acropora & 0.728 & (0.038) & 0.752 & (0.038) & 0.752 & (0.062) & 0.501 & (0.063) \\
-Finger Acropora    & 0.619 & (0.031) & 0.702 & (0.030) & 0.794 & (0.024) & 0.679 & (0.034) \\
-Finger Porites     & 0.674 & (0.041) & 0.698 & (0.040) & 0.511 & (0.065) & 0.475 & (0.063) \\
-Knob Porites       & 0.720 & (0.037) & 0.754 & (0.035) & 0.623 & (0.060) & 0.500 & (0.058) \\
-Mounding           & 0.452 & (0.040) & 0.501 & (0.040) & 0.484 & (0.051) & 0.320 & (0.040) \\
-Oddball            & 0.473 & (0.047) & 0.475 & (0.047) & 0.050 & (0.034) & 0.057 & (0.035) \\
-Pocillopora        & 0.673 & (0.040) & 0.702 & (0.039) & 0.564 & (0.063) & 0.542 & (0.062) \\
-Table Acropora     & 0.622 & (0.043) & 0.642 & (0.043) & 0.360 & (0.064) & 0.431 & (0.070) \\
+Branching Acropora &  46 & 0.566 & (0.091) & 0.723 & (0.075) & 0.916 & (0.031) & 0.597 & (0.097) \\
+Finger Acropora    & 100 & 0.685 & (0.040) & 0.813 & (0.029) & 0.850 & (0.023) & 0.779 & (0.050) \\
+Finger Porites     &  44 & 0.579 & (0.099) & 0.734 & (0.085) & 0.671 & (0.106) & 0.810 & (0.076) \\
+Knob Porites       &  37 & 0.490 & (0.085) & 0.657 & (0.078) & 0.808 & (0.061) & 0.554 & (0.091) \\
+Mounding           &  66 & 0.309 & (0.052) & 0.473 & (0.061) & 0.516 & (0.083) & 0.436 & (0.060) \\
+Oddball            &  36 & 0.025 & (0.018) & 0.049 & (0.034) & 0.039 & (0.031) & 0.064 & (0.045) \\
+Pocillopora        &  42 & 0.525 & (0.063) & 0.688 & (0.056) & 0.705 & (0.063) & 0.672 & (0.066) \\
+Table Acropora     &  33 & 0.388 & (0.096) & 0.559 & (0.100) & 0.619 & (0.119) & 0.510 & (0.118) \\
 \bottomrule
 \end{tabular}%
 }
@@ -702,33 +702,33 @@ Coral-cover accuracy and the bias decomposition above summarize how well aggrega
 
 \begin{table}[htbp]
 \centering
-\caption{Pixel-level IoU, Dice, precision, and recall by taxonomic class, macro-averaged over the 111-image held-out test set.}
+\caption{Pixel-level IoU, Dice, precision, and recall by taxonomic class, pooled across the 111-image held-out test set ($n$ = images whose ground truth contains the class; see notes).}
 \label{tab:iou-dice-taxonomy}
 \resizebox{\linewidth}{!}{%
-\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lrr rr rr rr}
+\begin{tabular*}{\wd\perftablebox}{@{\extracolsep{\fill}} lr rr rr rr rr}
 \toprule
-\textbf{Class} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
+\textbf{Class} & $n$ & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
-Live Coral Cover (all coral) & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
-Bleached (any genus)         & 0.350 & (0.033) & 0.427 & (0.034) & 0.635 & (0.037) & 0.395 & (0.037) \\
+Live Coral Cover (all coral) & 109 & 0.691 & (0.029) & 0.817 & (0.021) & 0.865 & (0.027) & 0.774 & (0.029) \\
+Bleached (any genus)         &  97 & 0.328 & (0.046) & 0.494 & (0.052) & 0.531 & (0.077) & 0.462 & (0.061) \\
 \midrule
-Branching Acropora & 0.728 & (0.038) & 0.752 & (0.038) & 0.752 & (0.062) & 0.501 & (0.063) \\
-Finger Acropora    & 0.619 & (0.031) & 0.702 & (0.030) & 0.794 & (0.024) & 0.679 & (0.034) \\
-Finger Porites     & 0.674 & (0.041) & 0.698 & (0.040) & 0.511 & (0.065) & 0.475 & (0.063) \\
-Knob Porites       & 0.720 & (0.037) & 0.754 & (0.035) & 0.623 & (0.060) & 0.500 & (0.058) \\
-Mounding           & 0.452 & (0.040) & 0.501 & (0.040) & 0.484 & (0.051) & 0.320 & (0.040) \\
-Oddball            & 0.473 & (0.047) & 0.475 & (0.047) & 0.050 & (0.034) & 0.057 & (0.035) \\
-Pocillopora        & 0.673 & (0.040) & 0.702 & (0.039) & 0.564 & (0.063) & 0.542 & (0.062) \\
-Table Acropora     & 0.622 & (0.043) & 0.642 & (0.043) & 0.360 & (0.064) & 0.431 & (0.070) \\
+Branching Acropora &  46 & 0.566 & (0.091) & 0.723 & (0.075) & 0.916 & (0.031) & 0.597 & (0.097) \\
+Finger Acropora    & 100 & 0.685 & (0.040) & 0.813 & (0.029) & 0.850 & (0.023) & 0.779 & (0.050) \\
+Finger Porites     &  44 & 0.579 & (0.099) & 0.734 & (0.085) & 0.671 & (0.106) & 0.810 & (0.076) \\
+Knob Porites       &  37 & 0.490 & (0.085) & 0.657 & (0.078) & 0.808 & (0.061) & 0.554 & (0.091) \\
+Mounding           &  66 & 0.309 & (0.052) & 0.473 & (0.061) & 0.516 & (0.083) & 0.436 & (0.060) \\
+Oddball            &  36 & 0.025 & (0.018) & 0.049 & (0.034) & 0.039 & (0.031) & 0.064 & (0.045) \\
+Pocillopora        &  42 & 0.525 & (0.063) & 0.688 & (0.056) & 0.705 & (0.063) & 0.672 & (0.066) \\
+Table Acropora     &  33 & 0.388 & (0.096) & 0.559 & (0.100) & 0.619 & (0.119) & 0.510 & (0.118) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} IoU and Dice are computed per image at the pixel level (union of masks of the given class vs.\ everything else) and averaged across the 111 test images; standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images. Genus-level precision/recall are lower than the coral-vs-non-coral (``Live Coral Cover'') row because they require the correct genus label, as opposed to merely correct coral/non-coral discrimination; the Oddball class's especially low precision/recall reflects its heterogeneous composition and low training frequency (Table~\ref{tab:mask-cover}).
+\item \emph{Notes:} IoU, Dice, precision, and recall pool TP/FP/FN pixel counts (union of masks of the given class vs.\ everything else) across all 111 test images before computing each ratio, following the standard Cityscapes/PASCAL-VOC-style mIoU convention, rather than averaging a separate ratio per image; a test image without the class simply contributes zero counts, so no special-casing is needed for class absence, and a model that hallucinates the class where it is absent is still penalized via false positives. $n$ reports how many of the 111 test images actually contain the class in the ground truth (informational only -- the pooled ratios themselves always use the full 111-image test set). Standard errors (in parentheses) come from a nonparametric bootstrap over images (2,000 resamples with replacement, pooled ratios recomputed each time, SE taken as the replicate standard deviation), since $\mathrm{SD}/\!\sqrt{n}$ applies only to a mean of per-image ratios, not a ratio of pooled sums. Genus-level precision/recall are lower than the coral-vs-non-coral (``Live Coral Cover'') row because they require the correct genus label, as opposed to merely correct coral/non-coral discrimination; the Oddball class's especially low performance across all four metrics reflects its heterogeneous composition and low training/test frequency (Table~\ref{tab:mask-cover}).
 \end{tablenotes}
 \end{table}
 
-Whole-image LCC segmentation attains a mean IoU of 0.674 and Dice of 0.781 on the held-out test set, while bleaching localization is a substantially harder sub-problem (IoU 0.350), consistent with bleaching status being a finer-grained, more ambiguous label even for coral experts (Section~\ref{sec:results}). Per-genus IoU ranges from 0.452 (Mounding) to 0.728 (Branching Acropora), broadly tracking the same fine-branching and densely aggregated growth forms already implicated in the coral-cover bias decomposition (Table~\ref{tab:bias-decomposition}).
+Whole-image LCC segmentation attains a pooled IoU of 0.691 and Dice of 0.817 on the held-out test set, while bleaching localization is a substantially harder sub-problem (IoU 0.328), consistent with bleaching status being a finer-grained, more ambiguous label even for coral experts (Section~\ref{sec:results}). Per-genus IoU ranges from 0.309 (Mounding) to 0.685 (Finger Acropora); genus-level IoU is naturally lower than the coral-vs-non-coral LCC row because it additionally requires the correct genus label rather than merely correct coral/non-coral discrimination (Table~\ref{tab:iou-dice-taxonomy}).
 
 Table~\ref{tab:model-performance} shows that, conditional on a candidate mask having already been proposed, our classification ensemble discriminates coral from non-coral and among taxa with high accuracy. However, the binding constraint on live coral cover estimation is finding coral in the first place: a colony SAM2 never proposes as a candidate mask can never be corrected by classification, however accurate that classification is. Segmentation quality therefore bounds and drives the coral-cover bias reported in Table~\ref{tab:bias-decomposition}, propagating downward into every morpho-taxonomic class regardless of classification performance---underscoring why we treat pipeline-level IoU/Dice as the primary measure of end-to-end quality (Section~\ref{sec:cnn}).
 
@@ -744,23 +744,23 @@ To contextualize these numbers against an external baseline, Table~\ref{tab:cora
 \textbf{Method} & \textbf{IoU} & & \textbf{Dice} & & \textbf{Precision} & & \textbf{Recall} & \\
 \midrule
 \multicolumn{9}{l}{\textit{In-Sample} ($n = 441$)} \\
-NeuralReefer & 0.714 & (0.010) & 0.813 & (0.008) & 0.882 & (0.007) & 0.792 & (0.009) \\
-Single CNN   & 0.695 & (0.010) & 0.801 & (0.008) & 0.851 & (0.008) & 0.783 & (0.009) \\
-CoralSCOP    & 0.503 & (0.011) & 0.635 & (0.011) & 0.618 & (0.011) & 0.766 & (0.012) \\
+NeuralReefer & 0.730 & (0.013) & 0.844 & (0.009) & 0.907 & (0.006) & 0.789 & (0.015) \\
+Single CNN   & 0.722 & (0.012) & 0.839 & (0.008) & 0.873 & (0.010) & 0.807 & (0.012) \\
+CoralSCOP    & 0.526 & (0.015) & 0.689 & (0.013) & 0.668 & (0.013) & 0.712 & (0.020) \\
 \midrule
 \multicolumn{9}{l}{\textit{Out-of-Sample} ($n = 111$)} \\
-NeuralReefer & 0.674 & (0.021) & 0.781 & (0.018) & 0.848 & (0.018) & 0.780 & (0.019) \\
-Single CNN   & 0.641 & (0.021) & 0.755 & (0.019) & 0.820 & (0.019) & 0.738 & (0.021) \\
-CoralSCOP    & 0.487 & (0.023) & 0.614 & (0.024) & 0.618 & (0.023) & 0.738 & (0.026) \\
+NeuralReefer & 0.691 & (0.029) & 0.817 & (0.021) & 0.865 & (0.027) & 0.774 & (0.029) \\
+Single CNN   & 0.662 & (0.029) & 0.797 & (0.021) & 0.843 & (0.030) & 0.756 & (0.029) \\
+CoralSCOP    & 0.508 & (0.032) & 0.673 & (0.028) & 0.670 & (0.032) & 0.677 & (0.039) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} All methods are scored identically (Section~\ref{sec:iou_dice}'s pixel-level IoU/Dice definitions) against the same 552 ground-truth annotations, split as elsewhere in this paper ($n=441$ training images, $n=111$ held-out test images). Standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images. CoralSCOP is a binary coral/non-coral segmenter and is compared only on the Live Coral Cover task, for which it provides a directly comparable label. ``Single CNN'' is an ablation that replaces the 5-model ensemble with submodel 4 alone (otherwise identical pipeline), included as a non-ensemble baseline.
+\item \emph{Notes:} All methods are scored identically (Section~\ref{sec:iou_dice}'s pixel-level IoU/Dice definitions) against the same 552 ground-truth annotations, split as elsewhere in this paper ($n=441$ training images, $n=111$ held-out test images; a handful of these images have no ground-truth coral at all -- 437 and 109, respectively, do -- but pooling is unaffected, since those images simply contribute zero counts). IoU/Dice/precision/recall pool TP/FP/FN pixel counts across all images in the split before computing each ratio (the same convention as Table~\ref{tab:iou-dice-taxonomy}), rather than averaging a separate ratio per image. Standard errors (in parentheses) come from a nonparametric bootstrap over images (2,000 resamples with replacement, pooled ratios recomputed each time, SE taken as the replicate standard deviation). CoralSCOP is a binary coral/non-coral segmenter and is compared only on the Live Coral Cover task, for which it provides a directly comparable label. ``Single CNN'' is an ablation that replaces the 5-model ensemble with submodel 4 alone (otherwise identical pipeline), included as a non-ensemble baseline.
 \end{tablenotes}
 \end{table}
 
-NeuralReefer outperforms CoralSCOP on every metric in both splits, most notably precision (0.848 vs.\ 0.618 out-of-sample), likely reflecting the benefit of a domain-specific ensemble classifier tuned to reject non-coral segmentations, on top of a mask proposal stage tuned for this survey imagery. Notably, even the single-submodel ablation---a non-ensemble ResNet classifier with no other pipeline changes---outperforms CoralSCOP on out-of-sample IoU, Dice, and precision, and matches it on recall, indicating that the SAM2 mask proposal and consolidation stages, not the ensemble alone, account for a substantial share of the improvement over CoralSCOP; the full 5-model ensemble then adds a further, smaller gain on top of that. Figure~\ref{fig:iou-exceedance} presents the full-model comparison as an exceedance curve across the full range of IoU thresholds: 81.1\% of NeuralReefer's test-set predictions reach IoU $\geq 0.5$ versus 50.5\% for CoralSCOP, and 54.1\% versus 18.9\% reach IoU $\geq 0.7$.
+NeuralReefer outperforms CoralSCOP on every metric in both splits, most notably precision (0.865 vs.\ 0.670 out-of-sample), likely reflecting the benefit of a domain-specific ensemble classifier tuned to reject non-coral segmentations, on top of a mask proposal stage tuned for this survey imagery. Notably, even the single-submodel ablation---a non-ensemble ResNet classifier with no other pipeline changes---outperforms CoralSCOP on every out-of-sample metric, including recall (0.756 vs.\ 0.677), indicating that the SAM2 mask proposal and consolidation stages, not the ensemble alone, account for a substantial share of the improvement over CoralSCOP; the full 5-model ensemble then adds a further, smaller gain on top of that. Figure~\ref{fig:iou-exceedance} presents the full-model comparison as an exceedance curve across the full range of IoU thresholds: 81.1\% of NeuralReefer's test-set predictions reach IoU $\geq 0.5$ versus 50.5\% for CoralSCOP, and 54.1\% versus 18.9\% reach IoU $\geq 0.7$.
 
 \begin{figure}[htbp]
     \centering
@@ -849,14 +849,14 @@ Because Yellowfin captures images at one-second intervals along a survey track, 
 \toprule
 \textbf{Test subset} & $n$ & \textbf{IoU} & & \textbf{Dice} & & \textbf{Accuracy} & \\
 \midrule
-All test images & 111 & 0.674 & (0.021) & 0.781 & (0.018) & 0.872 & (0.014) \\
-2\,m            &  96 & 0.675 & (0.021) & 0.783 & (0.020) & 0.884 & (0.014) \\
-5\,m            &  39 & 0.720 & (0.030) & 0.821 & (0.024) & 0.903 & (0.013) \\
+All test images & 111 & 0.691 & (0.029) & 0.817 & (0.021) & 0.872 & (0.014) \\
+2\,m            &  96 & 0.679 & (0.030) & 0.809 & (0.021) & 0.884 & (0.014) \\
+5\,m            &  39 & 0.735 & (0.032) & 0.847 & (0.022) & 0.903 & (0.013) \\
 \bottomrule
 \end{tabular*}%
 }
 \begin{tablenotes}
-\item \emph{Notes:} ``2\,m'' and ``5\,m'' denote subsets that exclude test images located within 2\,m and 5\,m of any training image (by UTM coordinates), respectively. 6 of the 111 test images lack usable GPS/UTM coordinates and are excluded from this spatial check but retained in all three subsets. 15 of the remaining 105 geolocated test images fall within 2\,m of a training image; 72 of 105 fall within 5\,m, reflecting the survey's dense (roughly one-second-interval) sampling along a continuous track. Standard errors (in parentheses) are $\mathrm{SD}/\!\sqrt{n}$ across images.
+\item \emph{Notes:} ``2\,m'' and ``5\,m'' denote subsets that exclude test images located within 2\,m and 5\,m of any training image (by UTM coordinates), respectively. 6 of the 111 test images lack usable GPS/UTM coordinates and are excluded from this spatial check but retained in all three subsets. 15 of the remaining 105 geolocated test images fall within 2\,m of a training image; 72 of 105 fall within 5\,m, reflecting the survey's dense (roughly one-second-interval) sampling along a continuous track. IoU and Dice pool TP/FP/FN pixel counts across all images in each subset before computing each ratio (the same convention as Table~\ref{tab:iou-dice-taxonomy}; $n$ here is the subset's total image count, of which 109, 94, and 39 respectively have any ground-truth coral). Standard errors (in parentheses) come from a nonparametric bootstrap over images (2,000 resamples with replacement, pooled ratios recomputed each time, SE taken as the replicate standard deviation).
 \end{tablenotes}
 \end{table}
 

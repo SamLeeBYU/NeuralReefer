@@ -1212,9 +1212,20 @@ neuralreefer_lcc <- bind_rows(
   tax_test  %>% filter(taxonomy == "lcc") %>% mutate(split = "Out-of-Sample")
 )
 
+# "Single CNN" ablation (submodel 4 alone, no ensemble) -- same per-image
+# schema as tax_train/tax_test, so it slots into the pooled + bootstrap
+# convention below the same way the other two methods do.
+single_cnn_lcc <- bind_rows(
+  read_csv("data/performance/inference/annotations_coco_ablation_submodel4_train_metrics.csv", show_col_types = FALSE) %>%
+    filter(taxonomy == "lcc") %>% mutate(split = "In-Sample"),
+  read_csv("data/performance/inference/annotations_coco_ablation_submodel4_test_metrics.csv", show_col_types = FALSE) %>%
+    filter(taxonomy == "lcc") %>% mutate(split = "Out-of-Sample")
+)
+
 comparison_all <- bind_rows(
   neuralreefer_lcc %>% mutate(method = "NeuralReefer"),
-  coralscop %>% mutate(method = "CoralSCOP")
+  single_cnn_lcc   %>% mutate(method = "Single CNN"),
+  coralscop        %>% mutate(method = "CoralSCOP")
 )
 
 # Same pooled + bootstrap convention as iou_dice_test above (kept consistent
