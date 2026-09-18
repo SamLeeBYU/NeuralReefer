@@ -1280,7 +1280,7 @@ exceedance_curve <- function(iou_vals, method_name) {
 }
 
 nr_test_iou <- per_image_iou(tax_test %>% filter(taxonomy == "lcc"))
-cs_test_iou <- per_image_iou(coralscop %>% filter(split == "Out-of-Sample"))
+cs_test_iou <- per_image_iou(coralscop %>% filter(taxonomy == "lcc", split == "Out-of-Sample"))
 
 exceedance_df <- bind_rows(
   exceedance_curve(nr_test_iou, "Present model"),
