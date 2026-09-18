@@ -53,21 +53,24 @@ def pixel_confusion_metrics(true_mask, pred_mask):
     computed directly from the raw TP/FP/FN pixel counts (no area
     normalization needed, since it cancels out of every ratio here).
 
-    precision/recall are NaN (not 0) when their denominator is zero, since
-    "no positive predictions" or "no positive ground truth" makes the ratio
-    undefined rather than 0 -- e.g. a taxonomy absent from both masks should
-    not be scored as 0 precision.
+    All four ratios are NaN (not 0 or 1) when their own denominator is zero,
+    since e.g. "no positive predictions and no positive ground truth" makes
+    IoU/precision/recall equally undefined (0/0) -- crediting that case as a
+    perfect score would silently inflate a rare/absent taxonomy's IoU/Dice
+    relative to its own precision/recall (which have always excluded this
+    case as undefined), rather than reflecting any real segmentation skill.
+    Callers computing a mean across images should use na.rm/skipna so these
+    undefined cases are excluded rather than treated as zero.
 
     Returns:
-        tp, fp, fn (int); iou, dice, precision, recall (float; iou/dice are
-        1.0 when both masks are empty, matching the "correctly predicted
-        nothing" convention)
+        tp, fp, fn (int); iou, dice, precision, recall (float; NaN when the
+        corresponding denominator is zero)
     """
     tp = int(np.logical_and(true_mask, pred_mask).sum())
     fp = int(np.logical_and(~true_mask, pred_mask).sum())
     fn = int(np.logical_and(true_mask, ~pred_mask).sum())
-    iou = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 1.0
-    dice = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
+    iou = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else float("nan")
+    dice = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else float("nan")
     precision = tp / (tp + fp) if (tp + fp) > 0 else float("nan")
     recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
     return tp, fp, fn, iou, dice, precision, recall

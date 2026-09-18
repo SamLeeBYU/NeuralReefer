@@ -1123,15 +1123,83 @@ cat("\nPer-genus totals (bleached+healthy):\n"); print(genus_totals, n = Inf)
 cat("\nMarginal sums (per bleach status, all genera):\n"); print(marginal_sums, n = Inf)
 cat("\nOverall LCC bias (train/test):\n"); print(overall_lcc_bias, n = Inf)
 
+# ---- Shared helper: pooled TP/FP/FN ratios + image-resampling bootstrap ---
+# A ratio of pooled counts (Cityscapes/PASCAL-VOC-style mIoU) is a nonlinear
+# function of the summed per-image TP/FP/FN, so SD/sqrt(n) -- valid only for
+# the sampling variability of a MEAN of per-image ratios -- does not apply
+# to it. Instead we resample images (the actual iid sampling unit) with
+# replacement, recompute the pooled ratios from each resampled set of
+# per-image counts, and use the SD of those bootstrap replicates as the
+# standard error. Used below for Table 6 (per-taxonomy), Table 7
+# (NeuralReefer vs. CoralSCOP), and Table A.8 (spatial-robustness).
+pixel_pooled_stats <- function(df) {
+  TP <- sum(df$tp_px); FP <- sum(df$fp_px); FN <- sum(df$fn_px)
+  tibble(
+    iou       = ifelse((TP + FP + FN) > 0, TP / (TP + FP + FN),         NA_real_),
+    dice      = ifelse((TP + FP + FN) > 0, 2 * TP / (2 * TP + FP + FN), NA_real_),
+    precision = ifelse((TP + FP)      > 0, TP / (TP + FP),             NA_real_),
+    recall    = ifelse((TP + FN)      > 0, TP / (TP + FN),             NA_real_)
+  )
+}
+
+# Same as pixel_pooled_stats, plus pooled pixel accuracy (1 - (FP+FN) /
+# total pixels), for tables that also report per-image "accuracy" (a
+# per-image column already defined elsewhere as 1 - (fp_px+fn_px)/IMG_PX);
+# pooling it the same way sums FP+FN across images against the images'
+# combined pixel budget (n_images * IMG_PX) rather than averaging per-image
+# accuracies directly.
+pixel_pooled_stats_acc <- function(df) {
+  bind_cols(pixel_pooled_stats(df),
+            tibble(accuracy = 1 - sum(df$fp_px + df$fn_px) / (nrow(df) * IMG_PX)))
+}
+
+# stat_fn(df) -> a one-row tibble of pooled point statistics for that set of
+# per-image rows (pixel_pooled_stats or pixel_pooled_stats_acc above).
+# Returns the point estimate plus a bootstrap SE (`se_<stat>`) for each.
+image_bootstrap <- function(df, stat_fn, n_boot = 2000, seed = 42) {
+  set.seed(seed)
+  n <- nrow(df)
+  point <- stat_fn(df)
+  boot <- map_dfr(seq_len(n_boot), function(b) stat_fn(df[sample.int(n, n, replace = TRUE), , drop = FALSE]))
+  se <- boot %>% summarise(across(everything(), ~ sd(.x, na.rm = TRUE)))
+  names(se) <- paste0("se_", names(se))
+  bind_cols(tibble(n_boot_images = n), point, se)
+}
+
 # ---- Per-taxonomy IoU/Dice/Precision/Recall table (test set) ---------------
-iou_dice_test <- tax_test %>%
-  rename(image_id = image) %>%
-  filter(!str_detect(taxonomy, ":")) %>%
+# Pooled/micro-averaged convention (as in Cityscapes/PASCAL-VOC-style mIoU):
+# TP/FP/FN pixel counts are summed across all 111 test images FIRST, and a
+# single IoU/Dice/Precision/Recall is computed from those totals -- rather
+# than averaging a separate per-image ratio (the macro-average this block
+# used previously). This handles class absence automatically with no
+# special-casing: an image with no ground-truth instance of the class
+# contributes 0 to TP and FN, and if the model correctly predicts nothing
+# there it contributes 0 to FP too, so the image simply drops out of the
+# sums; if the model hallucinates the class, that pixel count still lands
+# in FP and depresses pooled precision, as it should. No single image's
+# zero denominator can make any of the four ratios undefined -- only the
+# pooled totals' denominators matter, and those are zero only if the class
+# never appears anywhere in ground truth AND is never predicted anywhere.
+#
+# n is reported separately, as the number of test images whose GROUND TRUTH
+# actually contains the class (tp_px + fn_px > 0) -- i.e. how many images
+# this row's performance is really "about" -- while the pooled ratios AND
+# the bootstrap resampling both use the full 111-image test set (an image
+# without the class still correctly contributes zero counts either way).
+taxonomy_test <- tax_test %>% rename(image_id = image) %>% filter(!str_detect(taxonomy, ":"))
+
+taxonomy_test_n <- taxonomy_test %>%
   group_by(taxonomy) %>%
-  summarise(mean_iou = mean(iou), mean_dice = mean(dice_f1),
-            mean_precision = mean(precision, na.rm = TRUE), mean_recall = mean(recall, na.rm = TRUE),
-            .groups = "drop")
-cat("\n=== Per-taxonomy pixel IoU/Dice/Precision/Recall (test set, n=111 images) ===\n")
+  summarise(n = sum((tp_px + fn_px) > 0), .groups = "drop")
+
+iou_dice_test <- taxonomy_test %>%
+  group_by(taxonomy) %>%
+  group_modify(~ image_bootstrap(.x, pixel_pooled_stats)) %>%
+  ungroup() %>%
+  left_join(taxonomy_test_n, by = "taxonomy") %>%
+  relocate(n, .after = taxonomy)
+cat("\n=== Per-taxonomy pixel IoU/Dice/Precision/Recall (pooled TP/FP/FN across all 111 test images,",
+    "bootstrap SE over 2000 image resamples; n = images whose ground truth contains the class) ===\n")
 print(iou_dice_test, n = Inf)
 
 # ---- NeuralReefer vs. CoralSCOP: LCC IoU/Dice/Precision/Recall table -------
@@ -1144,15 +1212,30 @@ neuralreefer_lcc <- bind_rows(
   tax_test  %>% filter(taxonomy == "lcc") %>% mutate(split = "Out-of-Sample")
 )
 
-comparison_table <- bind_rows(
+comparison_all <- bind_rows(
   neuralreefer_lcc %>% mutate(method = "NeuralReefer"),
   coralscop %>% mutate(method = "CoralSCOP")
-) %>%
-  group_by(method, split) %>%
-  summarise(n = n(), iou = mean(iou), dice_f1 = mean(dice_f1),
-            precision = mean(precision, na.rm = TRUE), recall = mean(recall, na.rm = TRUE), .groups = "drop")
+)
 
-cat("\n=== NeuralReefer vs. CoralSCOP: LCC IoU/Dice/Precision/Recall ===\n")
+# Same pooled + bootstrap convention as iou_dice_test above (kept consistent
+# with Table 6's own "Live Coral Cover" row, which reports this identical
+# NeuralReefer-out-of-sample quantity -- a per-image macro-average here
+# would silently disagree with that row's pooled number). n is the number
+# of images in that (method, split) group whose ground truth contains any
+# coral at all; pooling and the bootstrap resample use the full group.
+comparison_n <- comparison_all %>%
+  group_by(method, split) %>%
+  summarise(n = sum((tp_px + fn_px) > 0), .groups = "drop")
+
+comparison_table <- comparison_all %>%
+  group_by(method, split) %>%
+  group_modify(~ image_bootstrap(.x, pixel_pooled_stats)) %>%
+  ungroup() %>%
+  left_join(comparison_n, by = c("method", "split")) %>%
+  relocate(n, .after = split)
+
+cat("\n=== NeuralReefer vs. CoralSCOP: LCC IoU/Dice/Precision/Recall (pooled TP/FP/FN,",
+    "bootstrap SE over 2000 image resamples; n = images with any ground-truth coral) ===\n")
 print(comparison_table, n = Inf)
 
 # ---- IoU exceedance curve: NeuralReefer vs. CoralSCOP, test set only -------
@@ -1235,22 +1318,24 @@ cat(n_missing_coords, "test image(s) lack usable GPS/UTM coordinates and could n
 cat(length(contam_2m), "of", nrow(test_coords), "geolocated test images are within 2m of a train image.\n")
 cat(length(contam_5m), "of", nrow(test_coords), "geolocated test images are within 5m of a train image.\n")
 
-spatial_summary <- bind_rows(
-  lcc_test_geo %>% summarise(subset = "All test images", n = n(),
-                              mean_iou      = mean(iou),      se_iou      = sd(iou)      / sqrt(n()),
-                              mean_dice     = mean(dice_f1),  se_dice     = sd(dice_f1)  / sqrt(n()),
-                              mean_accuracy = mean(accuracy), se_accuracy = sd(accuracy) / sqrt(n())),
-  lcc_test_geo %>% filter(!image_id %in% contam_2m) %>%
-    summarise(subset = "2m", n = n(),
-              mean_iou      = mean(iou),      se_iou      = sd(iou)      / sqrt(n()),
-              mean_dice     = mean(dice_f1),  se_dice     = sd(dice_f1)  / sqrt(n()),
-              mean_accuracy = mean(accuracy), se_accuracy = sd(accuracy) / sqrt(n())),
-  lcc_test_geo %>% filter(!image_id %in% contam_5m) %>%
-    summarise(subset = "5m", n = n(),
-              mean_iou      = mean(iou),      se_iou      = sd(iou)      / sqrt(n()),
-              mean_dice     = mean(dice_f1),  se_dice     = sd(dice_f1)  / sqrt(n()),
-              mean_accuracy = mean(accuracy), se_accuracy = sd(accuracy) / sqrt(n()))
+# Same pooled + bootstrap convention as iou_dice_test/comparison_table above
+# (this is the same NeuralReefer-out-of-sample LCC quantity reported there,
+# just re-computed on the 2m/5m-excluded subsets); n_gt is the number of
+# images in each subset whose ground truth contains any coral, reported
+# alongside the subset's total image count.
+spatial_subsets <- list(
+  "All test images" = lcc_test_geo,
+  "2m"              = lcc_test_geo %>% filter(!image_id %in% contam_2m),
+  "5m"              = lcc_test_geo %>% filter(!image_id %in% contam_5m)
 )
-cat("\nLCC IoU/Dice/Accuracy (mean + SE = SD/sqrt(n)), with vs. without spatially-contaminated test images excluded:\n")
+
+spatial_summary <- map_dfr(names(spatial_subsets), function(subset_name) {
+  df <- spatial_subsets[[subset_name]]
+  bind_cols(tibble(subset = subset_name, n_total = nrow(df), n_gt = sum((df$tp_px + df$fn_px) > 0)),
+            image_bootstrap(df, pixel_pooled_stats_acc) %>% select(-n_boot_images))
+})
+cat("\nLCC IoU/Dice/Accuracy (pooled TP/FP/FN, bootstrap SE over 2000 image resamples),",
+    "with vs. without spatially-contaminated test images excluded",
+    "(n_total = images in subset, n_gt = of those, images with any ground-truth coral):\n")
 print(spatial_summary, n = Inf)
 ################################################################################

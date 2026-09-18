@@ -124,13 +124,14 @@ def _canonical_taxonomy_label(category_name, remap_dic):
 def _pixel_confusion_metrics(true_mask, pred_mask):
     """Pixel-level IoU/Dice(=F1)/precision/recall between two boolean masks --
     same formula as train.py's pixel_confusion_metrics (duplicated, see the
-    module-level note above). precision/recall are NaN (not 0) when their
-    denominator is zero; iou/dice are 1.0 when both masks are empty."""
+    module-level note above). All four ratios are NaN when their own
+    denominator is zero (0/0 is equally undefined for iou/dice as it is for
+    precision/recall -- see train.py's pixel_confusion_metrics docstring)."""
     tp = int(np.logical_and(true_mask, pred_mask).sum())
     fp = int(np.logical_and(~true_mask, pred_mask).sum())
     fn = int(np.logical_and(true_mask, ~pred_mask).sum())
-    iou = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 1.0
-    dice = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
+    iou = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else float("nan")
+    dice = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else float("nan")
     precision = tp / (tp + fp) if (tp + fp) > 0 else float("nan")
     recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
     return tp, fp, fn, iou, dice, precision, recall
