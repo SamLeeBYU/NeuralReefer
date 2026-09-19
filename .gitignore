@@ -5,6 +5,7 @@ scripts/ensemble_aggregation_sim.R
 scripts/verify_split_integrity.py
 Rplots.pdf
 .claude
+.claude_scratch
 
 ### Large Files ###
 
